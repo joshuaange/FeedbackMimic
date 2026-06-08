@@ -307,7 +307,8 @@ def generate_mock_catalog(hmf_type, seed=42):
     # note: for these: nR is from np.linspace(0.5, 3.2/(1+z), 100)
     shear_slices       = []   # list of (nM,nR) arrays
     Sigma_slices       = []   # list of (nM,nR) arrays
-    DeltaSigma_slices       = []   # list of (nM,nR) arrays
+    DeltaSigma_slices   = []   # list of (nM,nR) arrays
+    R_proj_slices      = []
 
     Sigma_crit_arr = None
     for i, z in tqdm(enumerate(Z_ARR), total=len(Z_ARR), desc="Building HMF grid"):
@@ -355,11 +356,12 @@ def generate_mock_catalog(hmf_type, seed=42):
                                   left=0.0, right=0.0) # on uniform q grid
 
         if INCLUDE_SHEAR_PROFILES:
-            shear, deltasigma, sigma = get_tangential_shear(rho, R_ARR, z, Mtot, M200c, r_t, Sigma_crit_arr[i],
+            shear, deltasigma, sigma, R_proj = get_tangential_shear(rho, R_ARR, z, Mtot, M200c, r_t, Sigma_crit_arr[i],
                                                             M_min_to_consider = M_TRANSITION, full_output=True)
             shear_slices.append(shear)
             Sigma_slices.append(sigma)
             DeltaSigma_slices.append(deltasigma)
+            R_proj_slices.append(R_proj)
 
     # Poisson sampling for total number of clusters
     hmf_q_fsky = hmf_q_matrix * FSKY   # (nZ, nQ), survey-volume weighted
@@ -396,10 +398,37 @@ def generate_mock_catalog(hmf_type, seed=42):
     n_sel = sel.sum()
     print(f"  Selected N (q_obs > {Q_TH}) : {n_sel}")
 
+    # And now adding tangential shear profiles
+    z_cat      = z_samp[sel]
+    M200c_cat  = M200c_true[sel]
+    iz_cat     = z_idx[sel]  
+    N_R = len(shear_slices[0][0])  # number of radial bins (R_proj_arr_num=100)
+    gt_list = []
+    for idx in range(n_sel):
+        iz  = iz_cat[idx]
+        Mi  = M200c_cat[idx]   # Msol/h
+        gt_slice   = shear_slices[iz]    # (nM_valid, nR), could contain None for low-mass
+        M200c_sl   = M200c_slices[iz]    # (nM_valid,)
+    
+        # find valid (non-None) entries
+        valid_mask = np.array([g is not None for g in gt_slice])
+        M_valid    = M200c_sl[valid_mask]
+        gt_valid   = np.array([gt_slice[j] for j in range(len(gt_slice)) if valid_mask[j]])
+        # gt_valid shape: (n_valid, nR)
+    
+        # interpolate each radial bin in log mass
+        log_M_grid = np.log(M_valid)
+        log_Mi     = np.log(Mi)
+        gt_i = np.array([np.interp(log_Mi, log_M_grid, gt_valid[:, jr])
+                         for jr in range(N_R)])
+        gt_list.append(gt_i)
+
     catalog = {
         # per-cluster observables
         'z'             : z_samp[sel],
         'q_obs'         : q_obs[sel],
+        'gt_true'       : gt_list,   # list of (nR,) arrays, no noise
+        'R_proj_arr'    : [R_proj_slices[iz_cat[idx]] for idx in range(n_sel)],
         # true values per cluster (diagnostics only)
         'M200c_true'    : M200c_true[sel],   # Msol/h
         'Mvir_true'     : Mvir_true[sel],    # Msol/h

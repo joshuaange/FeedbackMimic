@@ -556,5 +556,5 @@ def get_tangential_shear(rho, r_arr, z, Mtot, M200c_arr, r_t, Sigma_crit_arr,
         tangential_shear_prof.append(DeltaSigma_arr / (Sigma_crit_arr - Sigma_arr))
 
     if full_output:
-        return tangential_shear_prof, DeltaSigmas, Sigmas
-    return tangential_shear_prof
+        return tangential_shear_prof, DeltaSigmas, Sigmas, R_proj_arr
+    return tangential_shear_prof, R_proj_arr

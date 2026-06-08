@@ -5,7 +5,7 @@ ax_fraction = 0.0127 	#axion fraction of dark matter
 m_ax = 10**(-25.6) 	#axion mass
 h = 0.68			#reduced hubbel: h = H/100
 z = 0.				#redshift
-M_min = 13 	        #min halo mass for halo model
+M_min = 11 	        #min halo mass for halo model
 M_max = 16		    #max halo mass for halo model
 
 #axionCAMB specifications

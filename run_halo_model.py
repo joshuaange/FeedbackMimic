@@ -19,8 +19,8 @@ CAMB_EXE     = "/home/jange/scratch/FeedbackMimic/axionCAMB"
 CAMB_WORKDIR = "/home/jange/scratch/FeedbackMimic/axionHMcode_work_directory"
 OUTPUT_DIR   = "/home/jange/scratch/FeedbackMimic/results/halo_model"
  
-NUM_M      = 250
-Z_ARR      = np.linspace(0.0, 2.0, 67)
+NUM_M      = 300
+Z_ARR      = np.linspace(0.0, 2.0, 81)[60:]
 DO_FULL_2H = True
 C_MIN      = 5.196
  

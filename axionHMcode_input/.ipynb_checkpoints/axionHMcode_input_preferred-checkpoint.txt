@@ -1,0 +1,18 @@
+# cosmological and astrophysical parameters
+omega_b_0 = 0.0226576#baryon density
+omega_d_0 = 0.1206864 	#total dark matter
+ax_fraction = 0.0127 	#axion fraction of dark matter
+m_ax = 10**(-25.6) 	#axion mass
+h = 0.68			#reduced hubbel: h = H/100
+z = 0.				#redshift
+M_min = 11 	        #min halo mass for halo model
+M_max = 16		    #max halo mass for halo model
+
+#axionCAMB specifications
+ns = 0.965			#scalar prectral index
+As = 2.1e-9			#scalar initial amplitude
+k_piv = 0.05 		#[1/Mpc] pivot scale
+transfer_kmax = 200 #max k axionCAMB runs
+
+# version, either basic version (via 'basic') or Dome+24 (via 'dome') patch
+version = 'dome'      # or basic

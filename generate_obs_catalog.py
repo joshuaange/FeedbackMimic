@@ -25,12 +25,13 @@ import pickle
 import numpy as np
 from scipy import integrate, interpolate
 from tqdm import tqdm
+from astropy.cosmology import FlatLambdaCDM
 
 # ── your existing imports ────────────────────────────────────────────────────
 from feedback_mimic import (
     dn_dlog10Mtot, get_NFW_profile, get_realspace_profile,
     dV_dz, profile_to_q, Mtot_to_MDelta, get_some_quantities,
-    get_FDM_profile, get_total_mass,
+    get_FDM_profile, get_total_mass, get_tangential_shear
 )
 
 # ── paths ────────────────────────────────────────────────────────────────────
@@ -44,6 +45,7 @@ HMF_TYPES = [
     'LCDM_hat0.0', 'LCDM_hat0.5', 'LCDM_hat1.0', 'LCDM', 'FDM_preferred'
 ]
 
+INCLUDE_SHEAR_PROFILES = True
 etaz            = 0.7
 FEEDBACK_MODEL  = f"etaz{etaz}_preferred_cooled"
 
@@ -233,6 +235,53 @@ def load_slice(z, hmf_type):
 
     return data, Mtot, hmf, rho, r_t, axion_dic
 
+if INCLUDE_SHEAR_PROFILES:
+    _G_SI    = 6.674e-11
+    _c_SI    = 2.998e8
+    _Mpc_m   = 3.0857e22
+    _Msol_kg = 1.989e30
+    def compute_Sigma_crit_arr(omega_m, h_fid=h_fid,
+                              _z_source_bins = np.array([0.285, 0.476, 0.743, 0.942])):
+        """
+        Compute Sigma_crit(z_l) for all lens redshifts in Z_ARR
+        directly from cosmology calculations, using Bocquet's source redshifts
+        """
+        Om0 = omega_m / h_fid**2
+        cosmo = FlatLambdaCDM(H0=h_fid * 100.0, Om0=Om0)
+        Sigma_crit_arr = np.zeros(len(Z_ARR))
+    
+        for j, z_l in enumerate(Z_ARR):
+            usable_sources = _z_source_bins[_z_source_bins > z_l]
+            if len(usable_sources) == 0:
+                Sigma_crit_arr[j] = np.inf
+                continue
+            DA_l = cosmo.angular_diameter_distance(z_l).value  # Mpc
+    
+            inv_scs = []
+    
+            for z_s in usable_sources:
+    
+                DA_s = cosmo.angular_diameter_distance(z_s).value  # Mpc
+                DA_ls = cosmo.angular_diameter_distance_z1z2(z_l, z_s).value  # Mpc
+    
+                if DA_ls <= 0:
+                    continue
+    
+                inv_sc = (
+                    4.0 * np.pi * _G_SI / _c_SI**2
+                    * (DA_l * _Mpc_m)
+                    * (DA_ls * _Mpc_m)
+                    / (DA_s * _Mpc_m)
+                )
+    
+                inv_scs.append(inv_sc * _Msol_kg / _Mpc_m**2)
+    
+            Sigma_crit_arr[j] = (
+                1.0 / np.mean(inv_scs) if len(inv_scs) > 0 else np.inf
+            )
+    
+        return Sigma_crit_arr
+
 
 # ── main catalog generator ───────────────────────────────────────────────────
 
@@ -254,11 +303,20 @@ def generate_mock_catalog(hmf_type, seed=42):
     hmf_q_matrix   = np.zeros((len(Z_ARR), NUM_Q))
     q_of_M200c_slices  = []   # list of (nM,) arrays
     M200c_slices       = []   # list of (nM,) arrays
+    R200c_slices       = []   # list of (nM,) arrays
+    # note: for these: nR is from np.linspace(0.5, 3.2/(1+z), 100)
+    shear_slices       = []   # list of (nM,nR) arrays
+    Sigma_slices       = []   # list of (nM,nR) arrays
+    DeltaSigma_slices       = []   # list of (nM,nR) arrays
 
+    Sigma_crit_arr = None
     for i, z in tqdm(enumerate(Z_ARR), total=len(Z_ARR), desc="Building HMF grid"):
 
         data, Mtot, hmf, rho, r_t, axion_dic = load_slice(z, hmf_type)
         # note: hmf here is dn/dlnMtot
+        if INCLUDE_SHEAR_PROFILES:
+            if Sigma_crit_arr is None:
+                Sigma_crit_arr = compute_Sigma_crit_arr(data['cosmos']['omega_m_0'])
         valid = Mtot > M_TRANSITION
         Mtot  = Mtot[valid]
         hmf   = hmf[valid]
@@ -266,7 +324,7 @@ def generate_mock_catalog(hmf_type, seed=42):
         r_t   = r_t[valid]
 
         # Convert Mtot -> M200c (still Msol/h)
-        M200c, _ = Mtot_to_MDelta(
+        M200c, R200c = Mtot_to_MDelta(
             data, r_t=r_t, M_arr=Mtot, r_arr=R_ARR,
             Del=M_DELTA, reference_density=M_REF_DENS,
             axion_dic=axion_dic, rho=rho, k_arr=K_ARR)
@@ -282,6 +340,7 @@ def generate_mock_catalog(hmf_type, seed=42):
         
         q_of_M200c_slices.append(q_of_M200c)
         M200c_slices.append(M200c)
+        R200c_slices.append(R200c)
 
         # Change of variables: dn/dlnq = dn/dlnM * |dlnM/dlnq|, sorted for safety, but probably unnecessary
         sort_idx   = np.argsort(q_of_M200c)
@@ -294,6 +353,13 @@ def generate_mock_catalog(hmf_type, seed=42):
         hmf_in_q = hmf_sorted * dlnM_dlnq * dV_dz(data)
         hmf_q_matrix[i] = np.interp(ln_q_target, np.log(q_sorted), hmf_in_q,
                                   left=0.0, right=0.0) # on uniform q grid
+
+        if INCLUDE_SHEAR_PROFILES:
+            shear, deltasigma, sigma = get_tangential_shear(rho, R_ARR, z, Mtot, M200c, r_t, Sigma_crit_arr[i],
+                                                            M_min_to_consider = M_TRANSITION, full_output=True)
+            shear_slices.append(shear)
+            Sigma_slices.append(sigma)
+            DeltaSigma_slices.append(deltasigma)
 
     # Poisson sampling for total number of clusters
     hmf_q_fsky = hmf_q_matrix * FSKY   # (nZ, nQ), survey-volume weighted
@@ -334,11 +400,18 @@ def generate_mock_catalog(hmf_type, seed=42):
         # per-cluster observables
         'z'             : z_samp[sel],
         'q_obs'         : q_obs[sel],
-        # true values (diagnostics only)
+        # true values per cluster (diagnostics only)
         'M200c_true'    : M200c_true[sel],   # Msol/h
-        'Mvir_true'     : Mvir_true[sel],   # Msol/h
+        'Mvir_true'     : Mvir_true[sel],    # Msol/h
         'q_mean'        : q_mean[sel],       # mean q from scaling relation
         'q_true'        : q_true[sel],       # after intrinsic scatter, before noise
+        # other values saved, just to not have to recompute
+        'shear_profiles': shear_slices,      # nZ, nM, nR -> mean tangential shear
+        'Sigma_profiles': Sigma_slices,      # nZ, nM, nR -> mean Sigma
+        'DeltaSigma_profiles': DeltaSigma_slices, # nZ, nM, nR -> mean DeltaSigma
+        'Sigma_crit'    : Sigma_crit_arr,    # in nZ -> used for shear profiles
+        'R200c_slices'  : R200c_slices, # nZ, nM
+        'M200c_slices'  : M200c_slices, # nZ, nM
         # metadata
         'hmf_type'      : hmf_type,
         'seed'          : seed,

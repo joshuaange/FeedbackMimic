@@ -463,7 +463,7 @@ def profile_to_q(data, axion_dic, \
                               alpha = 1.0510, beta = 5.4905, gamma = 0.3081, c500 = 1.177, P0h70m32 = 8.403, alpha_P = 0.12, include_alpha_P_prime=True,
                               profile_type = "Arnaud"):
     # y0
-    if profile_type is "Arnaud": 
+    if profile_type == "Arnaud": 
         P, r500_biased = universal_pressure_profile(data, axion_dic, \
                                   rho, r_t, M_arr, k_arr, r_arr,
                                   alpha, beta, gamma, c500, P0h70m32, alpha_P, include_alpha_P_prime,
@@ -491,3 +491,70 @@ def profile_to_q(data, axion_dic, \
         return q, y0, np.exp(log_sigma_sz), theta_500
 
     return q
+
+def get_tangential_shear(rho, r_arr, z, Mtot, M200c_arr, r_t, Sigma_crit_arr,
+            z_max = 20.0, R_min = 0.5, R_max = None, r_min = 1e-4, r_max = None, full_output=False,
+           R_for_Sigma_num = 100, R_proj_arr_num=100, M_min_to_consider=10**12.5):
+    """
+    Parameters
+    ----------
+    rho : array_like, shape ``(num_M, N_r)``
+        Real-space density profiles.
+    r_arr : array_like, shape ``(N_r,)``
+        Radial grid (same units as ``R`` in ``NFW_DeltaSigma``).
+    z : float
+        Halo redshift.
+    M200c_arr : array_like, shape ``(num_M,)``
+        M_200c values used as initial guesses for the fit. dmo 
+    r_t : array_like, shape ``(num_M,)``
+        Virial radii, used to set the upper limit of the log radial grid.
+    """
+    if R_max is None:
+        R_max = 3.2 / (1 + z) # these is set by Bocquet
+    if r_max is None:
+        r_max = R_max
+    R_proj_arr = np.linspace(R_min, R_max, R_proj_arr_num)
+    R_for_Sigma = np.logspace(np.log10(r_min), np.log10(r_max), R_for_Sigma_num)
+
+    DeltaSigmas = []
+    Sigmas = []
+    tangential_shear_prof = []
+    for i in range(len(M200c_arr)):
+        if Mtot[i] <= M_min_to_consider:  # skip low masses
+            MWL_arr[i] = M200c_arr[i]  # b_WL = 1 assumption
+            DeltaSigmas.append(None)
+            Sigmas.append(None)
+            continue
+        r_log_i = np.logspace(np.log10(r_min), np.log10(r_t[i]), 3000)
+        rho_interp_i = interp1d(r_log_i, np.interp(r_log_i, r_arr, rho[i]),
+                                kind='linear', bounds_error=False, fill_value=0.)
+
+        # Sigma(r)
+        Sigma_wide = np.zeros(len(R_for_Sigma))
+        for j, R in enumerate(R_for_Sigma):
+            #z_los = np.concatenate([np.linspace(0, R, 500), np.linspace(R, z_max, 200)[1:]])
+            z_inner = np.logspace(-8, np.log10(R), 1000)
+            z_outer = np.logspace(np.log10(R), np.log10(z_max), 500)
+            z_los = np.concatenate([[0], z_inner, z_outer[1:]])
+            Sigma_wide[j] = 2 * np.trapezoid(rho_interp_i(np.sqrt(R**2 + z_los**2)), z_los)
+        if full_output:
+            Sigmas.append(Sigma_wide.copy())
+        Sigma_arr = np.interp(R_proj_arr, R_for_Sigma, Sigma_wide)
+
+        # DeltaSigma(r)
+        Sigma_arr = np.interp(R_proj_arr, R_for_Sigma, Sigma_wide)
+        DeltaSigma_arr = np.zeros(len(R_proj_arr))
+        for j, R in enumerate(R_proj_arr):
+            R_inner = np.logspace(np.log10(r_min), np.log10(R), 500)
+            mean_Sigma = 2.0 / R**2 * np.trapezoid(np.interp(R_inner, R_for_Sigma, Sigma_wide) * R_inner, R_inner)
+            DeltaSigma_arr[j] = mean_Sigma - Sigma_arr[j]
+        if full_output:
+            DeltaSigmas.append(DeltaSigma_arr.copy())
+
+
+        # tangential shear
+        tangential_shear_prof.append(DeltaSigma_arr / (Sigma_crit_arr - Sigma_arr))
+
+    if full_output:
+        return tangential_shear_prof, DeltaSigmas, Sigmas
+    return tangential_shear_prof

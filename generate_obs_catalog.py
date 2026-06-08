@@ -313,6 +313,10 @@ def generate_mock_catalog(hmf_type, seed=42):
         np.interp(q_mean[j], q_of_M200c_slices[iz], M200c_slices[iz])
         for j, iz in enumerate(z_idx)
     ])
+    Mvir_true = np.array([
+        np.interp(q_mean[j], q_of_M200c_slices[iz], Mtot)
+        for j, iz in enumerate(z_idx)
+    ])
 
     # Two-layer scatter (cosmocnc Sec 5.1)
     # Layer 1 – intrinsic lognormal scatter on ln q_mean -> ln q_true
@@ -332,6 +336,7 @@ def generate_mock_catalog(hmf_type, seed=42):
         'q_obs'         : q_obs[sel],
         # true values (diagnostics only)
         'M200c_true'    : M200c_true[sel],   # Msol/h
+        'Mvir_true'     : Mvir_true[sel],   # Msol/h
         'q_mean'        : q_mean[sel],       # mean q from scaling relation
         'q_true'        : q_true[sel],       # after intrinsic scatter, before noise
         # metadata
@@ -343,7 +348,6 @@ def generate_mock_catalog(hmf_type, seed=42):
         # units / survey params
         'mass_units'        : 'Msol/h',
         'h_fid'             : h_fid,
-        'mass_for_cosmocnc' : 'divide M200c_true by h_fid',
         'Q_TH'              : Q_TH,
         'FSKY'              : FSKY,
         'SIGMA_LN_Q'        : SIGMA_LN_Q_INTRINSIC,

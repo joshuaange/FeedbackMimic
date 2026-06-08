@@ -1,0 +1,6 @@
+[submodule "axionCAMB"]
+	path = axionCAMB
+	url = https://github.com/joshuaange/axionCAMB
+[submodule "axionHMcode"]
+	path = axionHMcode
+	url = https://github.com/joshuaange/axionHMcode

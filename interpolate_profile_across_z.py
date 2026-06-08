@@ -7,7 +7,7 @@ import os
 import numpy as np
 from tqdm import tqdm
 from scipy.interpolate import interp1d
-from baryonic_mimic import get_some_quantities, get_NFW_profile, get_realspace_profile, get_spectra, get_enclosed_mass, uniform_density_ft, Mtot_to_MDelta, get_rho_cga
+from feedback_mimic import get_some_quantities, get_NFW_profile, get_realspace_profile, get_spectra, get_enclosed_mass, uniform_density_ft, Mtot_to_MDelta, get_rho_cga
 
 PROF_INPUT_FILE   = "/home/jange/scratch/FeedbackMimic/results/profile_matching"
 HALO_INPUT_FILE   = "/home/jange/scratch/FeedbackMimic/results/halo_model"
@@ -15,7 +15,7 @@ OUTPUT_DIR   = "/home/jange/scratch/FeedbackMimic/results/feedback_models"
  
 Z_ARR      = np.linspace(0.0, 2.0, 81)
 Z_OF_PROFILE_MATCHING = [0.0,0.5,1.0,1.5,2.0]
-GAMMA_SCALINGS  = [0.0, 0.5, 1.0]
+GAMMA_SCALINGS  = [0.0,0.5,1.0]
 K_ARR  = np.logspace(-6, 6, 8192)
 R_ARR  = np.logspace(-4, np.log10(1 / K_ARR.min()), 1500)
 

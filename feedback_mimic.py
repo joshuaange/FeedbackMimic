@@ -2,11 +2,11 @@ from axionHMcode.halo_model import PS_nonlin_cold
 import numpy as np
 from tqdm import tqdm
 from scipy import special
-from scipy.integrate import simpson, trapezoid
+from scipy.integrate import simpson, trapezoid, quad
 from scipy.interpolate import interp1d
 from scipy.optimize import brentq, root_scalar
 from mcfit import SphericalBessel
-from axionHMcode.halo_model.axion_density_profile import func_dens_profile_ax
+from axionHMcode.halo_model.axion_density_profile import func_dens_profile_ax, MaxofMc
 from axionHMcode.halo_model import PS_nonlin_cold
 from axionHMcode.cosmology.overdensities import func_r_vir, func_Delta_vir
 from axionHMcode.cosmology.basic_cosmology import func_H_z as H_of_z
@@ -16,7 +16,6 @@ from axionHMcode.halo_model.cold_density_profile import func_delta_char, func_co
 
 def smooth_kmax_filter(k_arr, k_max, width=0.5):
     return 1.0 / (1.0 + np.exp(-(np.log10(k_arr) - np.log10(k_max)) / width))
-
 
 def get_some_quantities(data, M_arr=None, axion_dic=None):
     if M_arr is None:
@@ -107,6 +106,48 @@ def get_realspace_profile(u_k, r_t, r_arr, k_arr, M_arr, just_one_M=False):
         rho[i] = M_arr[i] * inverse_spherical_ft(u_k[i], r_arr, k_arr)
         rho[i][r_arr > r_t[i]] = 0.0
     return rho
+
+def get_FDM_profile(data, r_arr, M_arr, k_arr, full_output=False):
+    """
+    Real-space cold + fuzzy dark matter (FDM) profile = axion + NFW components.
+
+    Parameters
+    ----------
+    data : dict
+        Must contain keys ``'cosmos'``, ``'power_spec_dic'``,
+        ``'hmcode_params'``, and ``'axion_param'``.
+    r_arr : array_like
+        Radial grid.
+    M_arr : array_like
+        Halo mass array (cold).
+    k_arr : array_like
+        Wavenumber grid.
+    full_output : bool, optional
+        If ``True``, return ``(rho_ax, rho_NFW)`` separately.
+
+    Returns
+    -------
+    rho_total : ndarray or tuple of ndarray
+        Shape ``(num_M, N_r)``. If ``full_output`` is ``True``, returns
+        ``(rho_ax, rho_NFW)`` instead.
+    """
+    cosmo_dic = data['cosmos']
+    r_v, rho_crit, rho_char, concentration, r_s, Delta_vir, rho_0, rho_0_wh = get_some_quantities(data, axion_dic=data['axion_param'])
+    
+    rho_ax_ex = func_dens_profile_ax(r_arr=r_arr, M=M_arr, cosmo_dic=data['cosmos'], power_spec_dic=data['power_spec_dic'], 
+                                  rho_central_param = data['axion_param']['central_dens'], hmcode_dic=data['hmcode_params'], 
+                                  concentration_param=True, eta_given=False, axion_dic=data['axion_param'])
+    rho_ax = np.zeros((np.size(M_arr),np.size(r_arr)))
+    for i, M_val in enumerate(M_arr):
+        rho_ax[i] = rho_ax_ex[i]
+        rho_ax[i][r_arr > r_v[i]] = 0.0
+    
+    rho_NFW = get_realspace_profile(get_NFW_profile(r_t=max(r_arr) * r_v/r_v, r_v=r_v, k_arr=k_arr, r_s=r_s, just_one_M=False), r_t=r_v, r_arr=r_arr, k_arr=k_arr, M_arr=M_arr, just_one_M=False)
+
+    if full_output:
+        return rho_ax,rho_NFW
+    
+    return rho_ax + rho_NFW
 
 
 def get_spectra(data_LCDM, utilde=None, full_2h=True, full_output=False,
@@ -283,3 +324,170 @@ def get_spectra(data_LCDM, utilde=None, full_2h=True,
     if full_output:
         return result # PS, 1h, 2h, hmf, M, u, c_min
     return result[0]
+
+def get_total_mass(data):
+    c_frac = 1 - data['cosmos']['omega_ax_0']/data['cosmos']['omega_m_0']
+    Ma_func = MaxofMc(data['M_CDM'], beta1=data['axion_param']['beta1'], beta2=data['axion_param']['beta2'], z=data['cosmos']['z'], OMEGA_M=data['cosmos']['Omega_m_0'], 
+                       c_frac=c_frac, little_h=data['cosmos']['h'], m_a=data['cosmos']['m_ax'], 
+                       version=data['cosmos']['version'], M_cut=data['axion_param']['M_cut'], no_cut = True)
+    Mtot = data['M_CDM'] + Ma_func
+    return Mtot
+
+def dn_dlog10Mtot(data, cosmology_type):
+    if cosmology_type == "LCDM":
+        dnLCDM_dlnMc = data['hmf'] # (1/M dn/dlnM) in units (h^4/MsolMpc^3)
+        dnLCDM_dlnMc *= data['M'] # (dn/dlnM) in units (h^3/Mpc^3)
+        dnLCDM_dlogMc = dnLCDM_dlnMc * np.log(10)  # (dn/dlogM)
+        
+        return data['M'], dnLCDM_dlogMc
+    elif cosmology_type == "FDM_ST":
+        # This is Sheth-Tormen FDM, just uses the linear cold power spectrum
+        dnST_dlnMc = data['hmf'] * data['M_CDM']
+        dnST_dlogMc = dnST_dlnMc * np.log(10)
+        Mtot = get_total_mass(data)
+        dnST_dlogMtot = dnST_dlnMc * np.gradient(np.log(data['M_CDM']))/np.gradient(np.log10(Mtot))
+
+        return Mtot, dnST_dlogMtot
+    if cosmology_type == "FDM" or cosmology_type == "FDM_preferred":
+        # This is the Dome fix for Sheth-Tormen FDM 
+        dnST_dlnMc = data['hmf'] * data['M_CDM']
+        dnST_dlogMc = dnST_dlnMc * np.log(10)
+        Mtot = get_total_mass(data)
+        dnST_dlogMtot = dnST_dlnMc * np.gradient(np.log(data['M_CDM']))/np.gradient(np.log10(Mtot))
+
+        # This is the Dome fix
+        alpha1 = 1.1
+        alpha2 = 2.2
+        beta = data['axion_param']['beta2']
+        f_ax = data['cosmos']['omega_ax_0'] / (data['cosmos']['omega_ax_0']+data['cosmos']['omega_d_0']+data['cosmos']['omega_b_0'])
+        M0 = 1.6e10 * (data['cosmos']['m_ax']/1e-22)**(-4/3) * data['cosmos']['h']
+        factor = 1 - beta*f_ax + beta*f_ax*(1 + (Mtot/M0)**(-alpha1))**(-alpha2)
+        
+        dn_dlnMtot = dnST_dlnMc * factor
+        dn_dlogMtot = dn_dlnMtot * np.log(10)
+        
+        return Mtot, dn_dlogMtot
+
+def comoving_distance(data, z=None):
+    if z is None:
+        z = data['cosmos']['z']
+    c = 299792.458
+    integral, _ = quad(lambda z_prime: 1 / H_of_z(z_prime,
+                                                  data['cosmos']['h'],
+                                                  data['cosmos']['Omega_m_0'],
+                                                  data['cosmos']['Omega_w_0']),
+                       0, z)
+    return c * integral
+
+def dV_dz(data, z=None):
+    if z is None:
+        z = data['cosmos']['z']
+    c = 299792.458
+    Dc = comoving_distance(data, z)
+    Hz = H_of_z(z, data['cosmos']['h'],
+                data['cosmos']['Omega_m_0'],
+                data['cosmos']['Omega_w_0'])
+    return 4*np.pi * Dc**2 * (c/Hz) # Mpc^3 / dz
+
+def universal_pressure_profile(data, axion_dic, \
+                              rho, r_t, M_arr, k_arr, r_arr,
+                              alpha = 1.0510, beta = 5.4905, gamma = 0.3081, c500 = 1.177, P0h70m32 = 8.403, alpha_P = 0.12, include_alpha_P_prime=True,
+                              bias_sz = 1.0, full_output=False):    
+    # P500
+    r_v, rho_crit, rho_char, concentration, r_s, Delta_vir, rho_0, rho_0_wh = get_some_quantities(data)
+    M500, r500 = Mtot_to_MDelta(
+                data, r_t, M_arr, k_arr, r_arr, Del=500, axion_dic=axion_dic, rho=rho,\
+                initial_r_index_to_try = 5, reference_density="critical", bias=bias_sz
+            )
+    f_B = data['cosmos']['Omega_b_0']/data['cosmos']['Omega_m_0']
+    G = 4.300917270069977e-09 # Mpc Msun^-1 (km/s)^2
+    mu = 0.59
+    mu_e = 1.14
+    P500 = (500.*f_B*G*mu*rho_crit/(2.*mu_e)) * (M500/r500) # km^2 * M_sun / (Mpc^3 * s^2)
+    P500 *= 1.989e33 # km^2 * g / (Mpc^3 * s^2)
+    P500 /= 3.086e24**3 # km^2 * g / (cm^3 * s^2)
+    P500 *= 1e5**2 # cm^2 * g / (cm^3 * s^2) = erg / cm^3
+    P500 *= 6.242e8 # keV / cm^3
+
+    # p(x) - dimensionless pressure shape
+    x = np.einsum('r,M->Mr',r_arr,1./r500) # M,r
+    P_0 = P0h70m32 * (data['cosmos']['h']/0.7)**(3./2)
+    p_x = P_0 * (c500*x)**-gamma * (1 + (c500*x)**alpha)**((gamma-beta)/alpha)
+    # vals from Arnaud:
+    # P0, c500, γ, α, β = 8.403 (h_70)**(3./2), 1.177, 0.3081, 1.0510, 5.4905
+
+    # other mass dependence, which deviates from self-similarity
+    # from Hasselfield (cites Arnaud), an approx: alpha_p_x = 0.22 / (1 + 8*x**3)
+    # from Arnaud :
+        #alpha_P = 0.12
+        #alpha_P_prime = 0.10 - (alpha_P + 0.10) * (x/0.5)**3 / (1 + (x/0.5)**3)
+        #alpha_p_x = alpha_P + alpha_P_prime 
+    if include_alpha_P_prime:
+        alpha_P_prime = 0.10 - (alpha_P + 0.10) * (x/0.5)**3 / (1 + (x/0.5)**3)
+    else:
+        alpha_P_prime = 0.
+    alpha_p_x = alpha_P + alpha_P_prime 
+        
+    m = M500 / (3e14 * 0.7)
+
+    P = P500[:,None] * p_x * m[:,None]**alpha_p_x # M,r
+    P[r_arr[None,:] > r_t[:,None]] = 0.0
+
+    if full_output:
+        return P, r500
+    return P
+
+def compute_y0(P, r_arr, r500, h, scale_on_r500_for_int_bounds = 5):
+    sigma_T_over_mec2 = 6.6524587321e-29 * 1e4 / 511 # cm^2 / keV.
+    Mpc_to_cm = 3.086e24 / h  # cm per Mpc/h
+
+    y0 = np.zeros(len(r500))
+    
+    for i in range(len(r500)):
+        mask = r_arr <= scale_on_r500_for_int_bounds * r500[i] # Arnaud suggestion for r_max
+        r_int = r_arr[mask] * Mpc_to_cm # cm
+        P_int = P[i, mask] # keV cm^-3
+        
+        y0_numerical = 2 * sigma_T_over_mec2 * np.trapezoid(P_int, r_int)
+
+        y0[i] = y0_numerical
+
+    # this now roughly matches cosmocnc, at least for the mass range and redshifts that are most relevant
+    return y0
+
+def profile_to_q(data, axion_dic, \
+                              rho, r_t, M_arr, k_arr, r_arr,
+                              bias_sz = 0.8, dof = 0.0,
+                              so_sim_sz_mf_noise_file_path="/home/jange/my_cnc_files/data/so_sim_sz_mf_noise.npy",
+                              full_output = False,
+                              alpha = 1.0510, beta = 5.4905, gamma = 0.3081, c500 = 1.177, P0h70m32 = 8.403, alpha_P = 0.12, include_alpha_P_prime=True,
+                              profile_type = "Arnaud"):
+    # y0
+    if profile_type is "Arnaud": 
+        P, r500_biased = universal_pressure_profile(data, axion_dic, \
+                                  rho, r_t, M_arr, k_arr, r_arr,
+                                  alpha, beta, gamma, c500, P0h70m32, alpha_P, include_alpha_P_prime,
+                                  bias_sz = bias_sz, full_output=True)
+    y0 = compute_y0(P, r_arr, r500_biased, data['cosmos']['h'])
+    log_y0 = np.log(y0)
+
+    # theta_500
+    D_A = comoving_distance(data) / (1 + data['cosmos']['z'])
+    theta_500 = r500_biased / D_A * (180 * 60 / np.pi)
+    log_theta_500 = np.log(theta_500)
+
+    # MMF noise
+    file_theta_500_vec, file_sigma_sz_vec = np.load(so_sim_sz_mf_noise_file_path)
+    file_theta_500_vec *= 180. * 60. / np.pi  # rad to arcmin
+    sigma_sz_poly = np.polyfit(np.log(file_theta_500_vec), np.log(file_sigma_sz_vec), deg=3)
+    log_sigma_sz = np.polyval(sigma_sz_poly, log_theta_500)
+
+    # layer 0
+    log_q_true = log_y0 - log_sigma_sz
+    # layer 1
+    q = np.sqrt(np.exp(log_q_true)**2 + dof)
+
+    if full_output:
+        return q, y0, np.exp(log_sigma_sz), theta_500
+
+    return q

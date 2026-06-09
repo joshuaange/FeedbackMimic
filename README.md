@@ -8,4 +8,5 @@ Repository for constructing halo density profiles that mimic the effects of ULA 
 - ``interpolate_profile_across_z.py`` to interpolate between the pivot z, in ``results/feedback_models/``
 ## Generating mock cluster catalogs
 The parts relevant to making a mock catalog (for LCDM, FDM, and LCDM+feedback):
-- ``generate_obs_catalog.py`` to do Poisson sampling with the hmf and get a list of halos by q and z, in ``results/mock_catalogs/``
+- ``generate_obs_catalog.py`` to do Poisson sampling with the hmf and get a list of halos by q, z, and g_t(r), in ``results/mock_catalogs/``
+## Running MCMC

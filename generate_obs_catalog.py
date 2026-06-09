@@ -91,7 +91,7 @@ R_ARR = np.logspace(-4, np.log10(1 / K_ARR.min()), 1500)
 
 # ── noise file (SO MMF) ──────────────────────────────────────────────────────
 file_theta_500_vec, file_sigma_sz_vec = np.load(
-    "/home/jange/my_cnc_files/data/so_sim_sz_mf_noise.npy")
+    "/home/jange/scratch/FeedbackMimic/cosmocnc_files/data/so_sim_sz_mf_noise.npy")
 file_theta_500_vec *= 180. * 60. / np.pi   # rad -> arcmin
 sigma_sz_poly = np.polyfit(
     np.log(file_theta_500_vec), np.log(file_sigma_sz_vec), deg=3)

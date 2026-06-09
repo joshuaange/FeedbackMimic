@@ -4,3 +4,6 @@
 [submodule "axionHMcode"]
 	path = axionHMcode
 	url = https://github.com/joshuaange/axionHMcode
+[submodule "cosmocnc_axionHMcode_jax"]
+	path = cosmocnc_axionHMcode_jax
+	url = https://github.com/joshuaange/cosmocnc_axionHMcode_jax

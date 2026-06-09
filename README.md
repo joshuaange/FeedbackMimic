@@ -10,3 +10,11 @@ Repository for constructing halo density profiles that mimic the effects of ULA 
 The parts relevant to making a mock catalog (for LCDM, FDM, and LCDM+feedback):
 - ``generate_obs_catalog.py`` to do Poisson sampling with the hmf and get a list of halos by q, z, and g_t(r), in ``results/mock_catalogs/``
 ## Running MCMC
+
+## To-Do:
+- Finish MCMC computation
+        - Read my catalog (done)
+        - bWL
+        - SZ params
+- Remove WL computation from cosmocnc_jax (old version), but keep ST_axionHMcode
+- Redo git so that it goes to cosmocnc jax survey files

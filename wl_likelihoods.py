@@ -38,7 +38,7 @@ def gt_nfw_from_profile(r_bins_Mpc, r_s, delta_char, rho_m, Sigma_crit):
 def log_lik_wl_cluster(gt_obs, sigma_gt, r_bins,
                         r_s_arr, delta_char_arr, rho_m, Sigma_crit,
                         b_WL_0, b_WL_M,
-                        M_arr, lnM_pivot,
+                        M_arr, M_pivot,
                         mass_pdf):           # P(M | q_obs, z) from bc_cpdf
     """
     Correct Bocquet-style WL term: marginalise over the SZ mass posterior.
@@ -65,7 +65,7 @@ def log_lik_wl_cluster(gt_obs, sigma_gt, r_bins,
     # Marginalise: integral of P(g_t|M) * P(M|q,z) dM
     # = trapz(exp(log_liks) * mass_pdf, lnM_arr)
     log_liks_shifted = log_liks - jnp.max(log_liks)
-    integral = jnp.trapz(jnp.exp(log_liks_shifted) * mass_pdf, lnM_arr)
+    integral = jnp.trapezoid(jnp.exp(log_liks_shifted) * mass_pdf, lnM_arr)
     return jnp.log(jnp.maximum(integral, 1e-300)) + jnp.max(log_liks)
 
 
@@ -73,6 +73,6 @@ log_lik_wl_all = jax.jit(jax.vmap(
     log_lik_wl_cluster,
     in_axes=(0, 0, 0,        # gt_obs, sigma_gt, r_bins
              0, 0, 0, 0,     # r_s, delta_char, rho_m, Sigma_crit
-             None, None,  # b_WL_0, b_WL_M, sigma_lnMWL
-             0, None, None)     # lnM_halo, lnM_pivot, n_MWL
+             None, None,     # b_WL_0, b_WL_M,
+             0, None, 0)     # lnM_halo, lnM_pivot, n_MWL
 ))

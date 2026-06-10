@@ -42,7 +42,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ── configuration ────────────────────────────────────────────────────────────
 HMF_TYPES = [
-    'LCDM_hat0.0', 'LCDM_hat0.5', 'LCDM_hat1.0', 'LCDM', 'FDM_preferred'
+    'LCDM', 'FDM_preferred', 'LCDM_hat0.0', 'LCDM_hat0.5', 'LCDM_hat1.0'
 ]
 
 INCLUDE_SHEAR_PROFILES = True
@@ -54,7 +54,7 @@ SEEDS            = [42]    # one seed per mock; extend list for ensemble
 
 # ── survey / cosmology ───────────────────────────────────────────────────────
 Q_TH    = 5.0              # SO detection threshold
-Q_MIN, Q_MAX = 0.1, 1000.0
+Q_MIN, Q_MAX = 4.0, 1000.0
 NUM_Q        = 100
 ln_q_target  = np.linspace(np.log(Q_MIN), np.log(Q_MAX), NUM_Q)
 q_target     = np.exp(ln_q_target)
@@ -91,7 +91,7 @@ R_ARR = np.logspace(-4, np.log10(1 / K_ARR.min()), 1500)
 
 # ── noise file (SO MMF) ──────────────────────────────────────────────────────
 file_theta_500_vec, file_sigma_sz_vec = np.load(
-    "/home/jange/scratch/FeedbackMimic/cosmocnc_files/data/so_sim_sz_mf_noise.npy")
+    "/home/jange/scratch/FeedbackMimic/cosmocnc_axionHMcode_jax/cosmocnc_jax/data/so_sim_sz_mf_noise.npy")
 file_theta_500_vec *= 180. * 60. / np.pi   # rad -> arcmin
 sigma_sz_poly = np.polyfit(
     np.log(file_theta_500_vec), np.log(file_sigma_sz_vec), deg=3)
@@ -317,7 +317,7 @@ def generate_mock_catalog(hmf_type, seed=42):
         # note: hmf here is dn/dlnMtot
         if INCLUDE_SHEAR_PROFILES:
             if Sigma_crit_arr is None:
-                Sigma_crit_arr = compute_Sigma_crit_arr(data['cosmos']['omega_m_0'])
+                Sigma_crit_arr = compute_Sigma_crit_arr(data['cosmos']['omega_m_0']) / h_fid
         valid = Mtot > M_TRANSITION
         Mtot  = Mtot[valid]
         hmf   = hmf[valid]
@@ -430,6 +430,7 @@ def generate_mock_catalog(hmf_type, seed=42):
         'gt_true'       : gt_list,   # list of (nR,) arrays, no noise
         'R_proj_arr'    : [R_proj_slices[iz_cat[idx]] for idx in range(n_sel)],
         # true values per cluster (diagnostics only)
+        'Sigma_crit_cluster' : np.interp(z_samp[idx], Z_ARR, Sigma_crit_arr),
         'M200c_true'    : M200c_true[sel],   # Msol/h
         'Mvir_true'     : Mvir_true[sel],    # Msol/h
         'q_mean'        : q_mean[sel],       # mean q from scaling relation

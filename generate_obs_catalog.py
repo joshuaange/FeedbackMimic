@@ -304,6 +304,8 @@ def generate_mock_catalog(hmf_type, seed=42):
     q_of_M200c_slices  = []   # list of (nM,) arrays
     M200c_slices       = []   # list of (nM,) arrays
     R200c_slices       = []   # list of (nM,) arrays
+    Mvir_slices       = []   # list of (nM,) arrays
+    Rvir_slices       = []   # list of (nM,) arrays
     # note: for these: nR is from np.linspace(0.5, 3.2/(1+z), 100)
     shear_slices       = []   # list of (nM,nR) arrays
     Sigma_slices       = []   # list of (nM,nR) arrays
@@ -342,6 +344,8 @@ def generate_mock_catalog(hmf_type, seed=42):
         q_of_M200c_slices.append(q_of_M200c)
         M200c_slices.append(M200c)
         R200c_slices.append(R200c)
+        Mvir_slices.append(Mtot)
+        Rvir_slices.append(r_t)
 
         # Change of variables: dn/dlnq = dn/dlnM * |dlnM/dlnq|, sorted for safety, but probably unnecessary
         sort_idx   = np.argsort(q_of_M200c)
@@ -442,6 +446,8 @@ def generate_mock_catalog(hmf_type, seed=42):
         'Sigma_crit'    : Sigma_crit_arr,    # in nZ -> used for shear profiles
         'R200c_slices'  : R200c_slices, # nZ, nM
         'M200c_slices'  : M200c_slices, # nZ, nM
+        'Rvir_slices'   : Rvir_slices, # nZ, nM
+        'Mvir_slices'   : Mvir_slices, # nZ, nM
         # metadata
         'hmf_type'      : hmf_type,
         'seed'          : seed,

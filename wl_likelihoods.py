@@ -1,3 +1,4 @@
+import numpy as np
 import jax
 import jax.numpy as jnp
 
@@ -59,6 +60,7 @@ def gt_nfw_from_profile(r_bins, M, rho_crit_z, c_200c, Sigma_crit):
     rho_s   = M / (4.0 * jnp.pi * r_s**3 * g_c)
 
     x         = r_bins / r_s
+    
     Sigma     = 2.0 * rho_s * r_s / (x**2 - 1.0) * (1.0 - _f_nfw(x))
     Sigma_bar = 4.0 * rho_s * r_s / x**2 * _g_nfw(x)
     DeltaSigma = Sigma_bar - Sigma
@@ -102,7 +104,69 @@ logP_gt_all = jax.jit(
             0, 0, 0,
             0, 0, 0, 0,
             None, None,
-            None,
+            None
         )
+    )
+)
+
+######################################## Numerical cache approach instead:
+
+# ── Load shear cache ──────────────────────────────────────────────────────────
+_CACHE_PATH = "/home/jange/scratch/FeedbackMimic/results/mcmc/MCMC_SHEAR_LCDM_CACHE.npz"
+_cache      = np.load(_CACHE_PATH)
+
+DS_GRID  = jnp.array(_cache['DS_cache'])    # (nZ, nM, nR)
+S_GRID   = jnp.array(_cache['S_cache'])     # (nZ, nM, nR)
+Z_GRID   = jnp.array(_cache['Z_ARR'])       # (nZ,)
+LNM_GRID = jnp.array(_cache['lnM_common'])  # (nM,)  log(M200c Msol/h)
+R_GRID   = jnp.array(_cache['R_proj'])      # (nR,)  Mpc/h
+
+# ── Grid-based gt ─────────────────────────────────────────────────────────────
+def _gt_from_grid(r_bins, lnM_wl, z_cl, Sigma_crit,
+                  DS_grid, S_grid, Z_arr, lnM_arr, R_arr):
+    """Bilinear interpolation in (z, lnM), then interp in R."""
+    iz = jnp.clip(jnp.searchsorted(Z_arr,   z_cl)   - 1, 0, Z_arr.shape[0]   - 2)
+    iM = jnp.clip(jnp.searchsorted(lnM_arr, lnM_wl) - 1, 0, lnM_arr.shape[0] - 2)
+    tz = (z_cl   - Z_arr[iz])   / (Z_arr[iz+1]   - Z_arr[iz])
+    tM = (lnM_wl - lnM_arr[iM]) / (lnM_arr[iM+1] - lnM_arr[iM])
+
+    def bilinear(grid):
+        return (grid[iz,   iM  ] * (1-tz) * (1-tM)
+              + grid[iz,   iM+1] * (1-tz) * tM
+              + grid[iz+1, iM  ] * tz     * (1-tM)
+              + grid[iz+1, iM+1] * tz     * tM)
+
+    DS = jnp.interp(r_bins, R_arr, bilinear(DS_grid))
+    S  = jnp.interp(r_bins, R_arr, bilinear(S_grid))
+    return DS / (Sigma_crit - S)
+
+
+def build_wl_kernel_grid():
+    def wl_kernel(gt_obs, sigma_gt, r_bins,
+                  M_arr, rho_crit_z, c_200c_arr, Sigma_crit,
+                  b_WL_0, b_WL_M, M_pivot,
+                  z_cl):
+        lnM_pivot = jnp.log(M_pivot)
+        def _one_mass(M):
+            ln_MWL = b_WL_0 + b_WL_M*jnp.log(M) - b_WL_M*lnM_pivot + lnM_pivot
+            gt_pred = _gt_from_grid(r_bins, ln_MWL, z_cl, Sigma_crit,
+                                    DS_GRID, S_GRID, Z_GRID, LNM_GRID, R_GRID)
+            chi2 = jnp.sum(((gt_obs - gt_pred) / sigma_gt)**2)
+            return -0.5 * chi2
+        logP = jax.vmap(_one_mass)(M_arr)
+        logP += (-jnp.sum(jnp.log(sigma_gt))
+                 -0.5 * gt_obs.size * jnp.log(2.*jnp.pi))
+        return logP
+    return wl_kernel
+
+_wl_kernel_grid = build_wl_kernel_grid()
+
+logP_gt_all_grid = jax.jit(
+    jax.vmap(
+        _wl_kernel_grid,
+        in_axes=(0, 0, 0,
+                 0, 0, 0, 0,
+                 None, None, None,
+                 0)   # z_cl per cluster
     )
 )

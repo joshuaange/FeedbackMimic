@@ -558,3 +558,83 @@ def get_tangential_shear(rho, r_arr, z, Mtot, M200c_arr, r_t, Sigma_crit_arr,
     if full_output:
         return tangential_shear_prof, DeltaSigmas, Sigmas, R_proj_arr
     return tangential_shear_prof, R_proj_arr
+
+from scipy.interpolate import interp1d
+import numpy as np
+
+
+def get_cached_profile(
+    z,
+    M200c,
+    profile_type,
+    cache,
+):
+
+    Z = cache["Z_ARR"]
+    lnM = cache["lnM_common"]
+
+    if profile_type == "GT":
+        prof_cache = cache["GT_cache"]
+    elif profile_type == "DS":
+        prof_cache = cache["DS_cache"]
+    elif profile_type == "S":
+        prof_cache = cache["S_cache"]
+    else:
+        raise ValueError(profile_type)
+
+    R_cache = cache["R_proj_cache"]
+
+    lnM_target = np.log(M200c)
+
+    iz1 = np.searchsorted(Z, z)
+
+    if iz1 == 0:
+        iz0 = iz1 = 0
+        wz = 0.
+    elif iz1 == len(Z):
+        iz0 = iz1 = len(Z) - 1
+        wz = 0.
+    else:
+        iz0 = iz1 - 1
+        wz = (z - Z[iz0]) / (Z[iz1] - Z[iz0])
+
+    def interp_mass(profile_z):
+
+        vals = np.empty(profile_z.shape[-1])
+
+        for ir in range(profile_z.shape[-1]):
+            vals[ir] = np.interp(
+                lnM_target,
+                lnM,
+                profile_z[:, ir]
+            )
+
+        return vals
+
+    p0 = interp_mass(prof_cache[iz0])
+    p1 = interp_mass(prof_cache[iz1])
+
+    # corresponding radius grids
+    R0 = R_cache[iz0]
+    R1 = R_cache[iz1]
+
+    profile = (1. - wz) * p0 + wz * p1
+    R = (1. - wz) * R0 + wz * R1
+
+    return R, profile
+
+def evaluate_cached_profile(
+    z,
+    M200c,
+    R_eval,
+    profile_type,
+    cache,
+):
+    R, prof = get_cached_profile(
+        z=z,
+        M200c=M200c,
+        profile_type=profile_type,
+        cache=cache
+    )
+
+    return np.interp(R_eval, R, prof)

@@ -416,13 +416,14 @@ def generate_mock_catalog(hmf_type, seed=42):
         gt_obs_pad[idx, :n_r] = gt_rebinned
         # padded bins keep np.nan
 
-        # Shape noise: exact same computation as external likelihood's second sigma_g loop
+        # Shape noise:
         dR_i    = np.gradient(R_bins)
         A_ann_i = (2. * np.pi * R_bins * dR_i
                    * (180. * 60. / np.pi / DA_h)**2)
-        sigma_i = SIGMA_SHAPE / np.sqrt(np.maximum(N_SOURCE * A_ann_i, 1.))
+        sigma_i = SIGMA_SHAPE / np.sqrt(np.maximum(N_SOURCE * A_ann_i, 1.)) # sigma_g,t
+        noise = rng.normal(0., sigma_i, size=n_r)   # (n_r,) draw per bin
+        gt_obs_pad[idx, :n_r] = gt_rebinned + noise
         sigma_g_pad[idx, :n_r] = sigma_i
-        # padded bins keep 1e10
 
     # ── Assemble catalog (all original keys preserved) ────────────────────────
     catalog = {

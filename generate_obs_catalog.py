@@ -35,7 +35,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ── configuration (unchanged) ─────────────────────────────────────────────────
 HMF_TYPES = [
-    'LCDM', 'FDM_preferred', 'LCDM_hat0.0', 'LCDM_hat0.5', 'LCDM_hat1.0'
+    'FDM_preferred', 'LCDM_hat0.0', 'LCDM_hat0.5', 'LCDM_hat1.0', 'LCDM'
 ]
 
 INCLUDE_SHEAR_PROFILES = True
@@ -43,10 +43,12 @@ etaz           = 0.7
 FEEDBACK_MODEL = f"etaz{etaz}_preferred_cooled"
 
 N_MOCKS_PER_TYPE = 1
+SEEDS            = [43,44,45,46,47,48,49,50,51]
 SEEDS            = [42]
 
 Q_TH  = 5.0
 Q_MIN = 3.0
+Q_FLOOR    = 1.0   # below this, contribution is provably negligible
 FSKY  = 0.4
 h_fid = 0.68
 
@@ -283,8 +285,12 @@ def generate_mock_catalog(hmf_type, seed=42):
             M_arr=Mtot, k_arr=K_ARR, r_arr=R_ARR,
             bias_sz=0.8, dof=0.0)
 
-        q_min_mask       = q_of_M200c >= Q_MIN
-        hmf_M200c_masked = hmf_M200c * q_min_mask
+        #q_min_mask       = q_of_M200c >= Q_MIN
+        #hmf_M200c_masked = hmf_M200c * q_min_mask
+        x = (q_of_M200c - Q_FLOOR) / (Q_MIN - Q_FLOOR)
+        taper = np.clip(x, 0., 1.)
+        taper = taper**2 * (3. - 2.*taper)   # smoothstep: C1-continuous, 0 at floor, 1 at Q_MIN_SOFT
+        hmf_M200c_masked = hmf_M200c * taper
 
         hmf_M_matrix[i] = np.interp(
             ln_M_target,

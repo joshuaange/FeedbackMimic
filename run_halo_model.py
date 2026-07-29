@@ -7,6 +7,7 @@ import os
 import numpy as np
 from axionHMcode.axionCAMB_and_lin_PS import axionCAMB_wrapper
 from axionHMcode.axionCAMB_and_lin_PS import load_cosmology
+from axionHMcode.cosmology.overdensities import func_D_z_unnorm_int
 from axionHMcode.axionCAMB_and_lin_PS import lin_power_spectrum
 from axionHMcode.halo_model import HMcode_params
 from axionHMcode.halo_model import PS_nonlin_cold
@@ -20,7 +21,7 @@ CAMB_WORKDIR = "/home/jange/scratch/FeedbackMimic/axionHMcode_work_directory"
 OUTPUT_DIR   = "/home/jange/scratch/FeedbackMimic/results/halo_model"
  
 NUM_M      = 300
-Z_ARR      = np.linspace(0.0, 2.0, 81)[60:]
+Z_ARR      = np.linspace(0.0, 2.0, 81)[70:]
 DO_FULL_2H = True
 C_MIN      = 5.196
  
@@ -46,12 +47,13 @@ cosmos_LCDM = load_cosmology.load_cosmology_input(INPUT_FILE, LCDM = True)
 print("computing the non-linear total matter power spectrum in the folowing MDM cosmology \n")
 print("omega_m = {0} \nomega_cdm = {1} \nomega_ax = {2} \nomega_b = {3} \nm_ax = {4}eV \nz = {5} \nh = {6} \n".format(cosmos['omega_m_0'], cosmos['omega_d_0'], cosmos['omega_ax_0'], cosmos['omega_b_0'], 
                                                                                                                           cosmos['m_ax'], cosmos['z'], cosmos['h']))
-
 print(f"working on Z_ARR = {Z_ARR}")
 
 for z in tqdm(Z_ARR):
     cosmos['z'] = z
     cosmos_LCDM['z'] = z
+    cosmos['G_a']      = func_D_z_unnorm_int(z, cosmos['Omega_m_0'],      cosmos['Omega_w_0'])
+    cosmos_LCDM['G_a'] = func_D_z_unnorm_int(z, cosmos_LCDM['Omega_m_0'], cosmos_LCDM['Omega_w_0'])
     print("z = " + str(z))
 
     print("axionCAMB is running. Computes transfer function for cosmology with a axion fraction of {}"

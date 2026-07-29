@@ -241,14 +241,14 @@ def Mtot_to_MDelta(data, r_t, M_arr, k_arr, r_arr, Del=200, axion_dic=None, rho=
     if Del == "vir":
         Del = Delta_vir
         if reference_density == "mean":
-            return M_arr, r_v
+            return bias * M_arr, bias**(1./3.) * r_v
 
     def Mvir_to_MDelta_NFW():
         M_out, r_out = [], []
         for j, M_def in enumerate(M_arr):
             def func(R):
                 return M_def * f(R/r_s[j]) / f(concentration[j]) \
-                       - (4./3)*np.pi*R**3 * Del * rho_ref * bias
+                       - (4./3)*np.pi*R**3 * Del * rho_ref
             try:
                 r_d = brentq(func, r_arr[initial_r_index_to_try], r_t[j])
                 M_d = M_def * f(r_d/r_s[j]) / f(concentration[j])
@@ -256,14 +256,14 @@ def Mtot_to_MDelta(data, r_t, M_arr, k_arr, r_arr, Del=200, axion_dic=None, rho=
                 r_d, M_d = 0.0, 0.0
             r_out.append(r_d)
             M_out.append(M_d)
-        return np.asarray(M_out), np.asarray(r_out)
+        return bias * np.asarray(M_out), bias**(1./3.) * np.asarray(r_out)
 
     def Mvir_to_MDelta_numerical(rho):
         M_out, r_out = [], []
         for j, M_def in enumerate(M_arr):
             def func(R):
                 return get_enclosed_mass(rho=rho[j], r_t=R, r_arr=r_arr, just_one_M=True) \
-                       - (4./3)*np.pi*R**3 * Del * rho_ref * bias
+                       - (4./3)*np.pi*R**3 * Del * rho_ref
             try:
                 r_d = brentq(func, r_arr[initial_r_index_to_try], r_t[j])
                 M_d = get_enclosed_mass(rho=rho[j], r_t=r_d, r_arr=r_arr, just_one_M=True)
@@ -271,7 +271,7 @@ def Mtot_to_MDelta(data, r_t, M_arr, k_arr, r_arr, Del=200, axion_dic=None, rho=
                 r_d, M_d = 0.0, 0.0
             r_out.append(r_d)
             M_out.append(M_d)
-        return np.asarray(M_out), np.asarray(r_out)
+        return bias * np.asarray(M_out), bias**(1./3.) * np.asarray(r_out)
 
     if rho is None:
         return Mvir_to_MDelta_NFW()
@@ -411,7 +411,7 @@ def universal_pressure_profile(data, axion_dic, \
 
     # p(x) - dimensionless pressure shape
     x = np.einsum('r,M->Mr',r_arr,1./r500) # M,r
-    P_0 = P0h70m32 * (data['cosmos']['h']/0.7)**(3./2)
+    P_0 = P0h70m32 * (data['cosmos']['h']/0.7)**(-3./2)
     p_x = P_0 * (c500*x)**-gamma * (1 + (c500*x)**alpha)**((gamma-beta)/alpha)
     # vals from Arnaud:
     # P0, c500, γ, α, β = 8.403 (h_70)**(3./2), 1.177, 0.3081, 1.0510, 5.4905
@@ -460,27 +460,73 @@ def profile_to_q(data, axion_dic, \
                               bias_sz = 0.8, dof = 0.0,
                               so_sim_sz_mf_noise_file_path="/home/jange/scratch/FeedbackMimic/cosmocnc_axionHMcode_jax/cosmocnc_jax/data/so_sim_sz_mf_noise.npy",
                               full_output = False,
-                              alpha = 1.0510, beta = 5.4905, gamma = 0.3081, c500 = 1.177, P0h70m32 = 8.403, alpha_P = 0.12, include_alpha_P_prime=True,
-                              profile_type = "Arnaud"):
+                              alpha = 1.0510, beta = 5.4905, gamma = 0.3081, c500 = 1.177, P0h70m32 = 8.403, alpha_P = 0.12, include_alpha_P_prime=True, 
+                              pressure_profile_prescription = "ArnaudUPP", 
+                              nu=None,
+                              theta_out=4.0,          # sets the polytropic index
+                              theta_co=0.1,           # BCM core radius / r200c   (fixed in BCM)
+                              theta_ej=4.0,           # BCM ejection radius / r200c
+                              M_gas_c=1.2e14,         # beta_gas pivot mass, Msun/h
+                              mu_gas=0.31,            # beta_gas slope
+                              A_star=0.09,            # BCM stellar normalisation
+                              M_star_0=2.5e11,        # BCM stellar pivot, Msun/h
+                              eta_star=0.32,          # total stellar fraction slope):
+                              Gamma=1.2,              # Shaw et al. (2010) default
+                              B_param=None,           # None -> B = 1 (Arico-equivalent normalisation)
+                              f_th_model=None,
+                              r_s = None, conc = None,
+                              eta_cga=0.6, R_cga_h_frac=0.015,
+                              BCM_gas_type = "Arico"):
     # y0
-    if profile_type == "Arnaud": 
+    if pressure_profile_prescription == "ArnaudUPP":
         P, r500_biased = universal_pressure_profile(data, axion_dic, \
-                                  rho, r_t, M_arr, k_arr, r_arr,
-                                  alpha, beta, gamma, c500, P0h70m32, alpha_P, include_alpha_P_prime,
-                                  bias_sz = bias_sz, full_output=True)
+                                rho, r_t, M_arr, k_arr, r_arr,
+                                alpha, beta, gamma, c500, P0h70m32, alpha_P, include_alpha_P_prime,
+                                bias_sz = bias_sz, full_output=True)
+    elif pressure_profile_prescription == "AricoBCM":
+        P, r500_biased, pressure_dict = pressure_profile_arico(
+                                data, axion_dic, rho, r_t, M_arr, k_arr, r_arr,
+                                theta_out=theta_out,
+                                theta_co=theta_co,
+                                theta_ej=theta_ej,
+                                M_gas_c=M_gas_c,
+                                mu_gas=mu_gas,
+                                A_star=A_star,
+                                M_star_0=M_star_0,
+                                eta_star=eta_star,
+                                f_th_model=f_th_model,
+                                nu=nu, bias_sz=bias_sz, full_output=True, r_s = r_s, conc=conc)
+    elif pressure_profile_prescription == "baryonPasting":
+        P, r500_biased, pressure_dict = pressure_profile_baryon_pasting(
+                                data, axion_dic, rho, r_t, M_arr, k_arr, r_arr,
+                                Gamma=Gamma,              # Shaw et al. (2010) default
+                                B_param=B_param,           # None -> B = 1 (Arico-equivalent normalisation)
+                                A_star=A_star,
+                                M_star_0=M_star_0,
+                                eta_star=eta_star,
+                                f_th_model=f_th_model,
+                                nu=nu, bias_sz=bias_sz, full_output=True, r_s = r_s, conc=conc)
     y0 = compute_y0(P, r_arr, r500_biased, data['cosmos']['h'])
     log_y0 = np.log(y0)
 
     # theta_500
     D_A = comoving_distance(data) / (1 + data['cosmos']['z'])
-    theta_500 = r500_biased / D_A * (180 * 60 / np.pi)
+    D_A_h = D_A * data['cosmos']['h']; 
+    theta_500 = r500_biased / D_A_h * (180*60/np.pi)
+    #theta_500 = r500_biased / D_A * (180*60/np.pi) # old, biased: D_A is physical Mpc, r500_biased is Mpc/h
     log_theta_500 = np.log(theta_500)
 
     # MMF noise
     file_theta_500_vec, file_sigma_sz_vec = np.load(so_sim_sz_mf_noise_file_path)
     file_theta_500_vec *= 180. * 60. / np.pi  # rad to arcmin
     sigma_sz_poly = np.polyfit(np.log(file_theta_500_vec), np.log(file_sigma_sz_vec), deg=3)
-    log_sigma_sz = np.polyval(sigma_sz_poly, log_theta_500)
+    # Clamp to the noise file's fitted domain: sigma_sz plateaus beyond the
+    # largest/smallest measured filter scale, matching the likelihood-side
+    # clamp in sr_q_so_sim_layer0 (survey_sr_so_sim.py) exactly.
+    log_theta_clamped = np.clip(log_theta_500,
+                                np.log(file_theta_500_vec.min()),
+                                np.log(file_theta_500_vec.max()))
+    log_sigma_sz = np.polyval(sigma_sz_poly, log_theta_clamped)
 
     # layer 0
     log_q_true = log_y0 - log_sigma_sz
@@ -638,3 +684,388 @@ def evaluate_cached_profile(
     )
 
     return np.interp(R_eval, R, prof)
+
+###################################################### Some alternative pressure profiles:
+
+_G       = 4.300917270069977e-09   # Mpc Msun^-1 (km/s)^2
+_MU      = 0.59                    # mean molecular weight
+_MU_E    = 1.14                    # mean molecular weight per free electron
+
+def _to_keV_per_cm3(P):
+    """Msun (km/s)^2 / Mpc^3  ->  keV/cm^3. Identical chain to P500 in
+    universal_pressure_profile, kept separate so the two agree by construction."""
+    P = P * 1.989e33          # Msun -> g
+    P = P / 3.086e24**3       # Mpc^3 -> cm^3
+    P = P * 1e5**2            # km^2 -> cm^2   (now erg/cm^3)
+    P = P * 6.242e8           # erg/cm^3 -> keV/cm^3
+    return P
+
+def _nfw_m(c):
+    return np.log(1. + c) - c / (1. + c)
+
+def f_th_green2020(x, nu, A=0.495, B=0.719, C=1.417, D=-0.166, E=0.265, F=-2.116):
+    """
+    Thermal pressure fraction, Green et al. (2020) Eq. 15.
+
+        f_th(x, nu) = A (1 + exp[-(x/B)^C]) (nu/4.1)^{D / (1 + (x/E)^F)}
+
+    x   : r / r_200m   (NOTE: 200-times-MEAN, not 500c)
+    nu  : peak height delta_c(z)/sigma(M,z) -- the same quantity already
+          computed in the ST_axionHMcode HMF branch.
+
+    Generalises the Nelson, Lau & Nagai (2014) universal f_nth profile by adding
+    an explicit peak-height dependence, i.e. more massive / rarer haloes retain a
+    larger non-thermal fraction at fixed scaled radius.
+    """
+    x = np.asarray(x, dtype=float)
+    nu = np.asarray(nu, dtype=float)
+    expo = D / (1. + (x / E)**F)
+    return A * (1. + np.exp(-(x / B)**C)) * (nu / 4.1)**expo
+
+def f_th_nelson2014(x, A=0.452, B=0.841, C=1.628):
+    """
+    Thermal fraction implied by the Nelson, Lau & Nagai (2014) non-thermal
+    pressure fraction, f_th = 1 - f_nth, with
+
+        f_nth(x) = 1 - A (1 + exp[-(x/B)^C]),      x = r / r_200m
+
+    Provided as the mass-independent alternative to Green et al. (2020); this is
+    the form used inside the Shaw et al. (2010) / Flender et al. (2017) baryon
+    pasting chain.
+    """
+    x = np.asarray(x, dtype=float)
+    return A * (1. + np.exp(-(x / B)**C))
+
+def _rho_s_and_rs(data, M_arr, r_t, axion_dic=None):
+    """
+    NFW scale density and scale radius on the input mass grid, both in h-units:
+    rho_s in (Msun/h)/(Mpc/h)^3, r_s in Mpc/h.
+
+    Computed directly from M_vir, r_s and c rather than read from
+    get_some_quantities' `rho_char`, so the normalisation convention is explicit
+    and cannot silently disagree with the enclosed-mass definition used here.
+    """
+    _, _, _, concentration, r_s, _, _, _ = get_some_quantities(data, axion_dic=axion_dic)
+    rho_s = M_arr / (4. * np.pi * r_s**3 * _nfw_m(concentration))
+    return rho_s, r_s, concentration
+
+def pressure_profile_arico(
+        data, axion_dic, rho, r_t, M_arr, k_arr, r_arr,
+        nu=None,
+        theta_out=4.0,          # sets the polytropic index
+        theta_co=0.1,           # BCM core radius / r200c   (fixed in BCM)
+        theta_ej=4.0,           # BCM ejection radius / r200c
+        M_gas_c=1.2e14,         # beta_gas pivot mass, Msun/h
+        mu_gas=0.31,            # beta_gas slope
+        A_star=0.09,            # BCM stellar normalisation
+        M_star_0=2.5e11,        # BCM stellar pivot, Msun/h
+        eta_star=0.32,          # total stellar fraction slope
+        bias_sz=1.0,
+        f_th_model="green2020",
+        full_output=False, r_s = None, conc = None):
+    """
+    WHAT THIS DOES
+    --------------
+    Rather than assuming a fixed, observationally-calibrated pressure SHAPE (as
+    the Arnaud UPP does), this prescription derives the pressure from the gas
+    DENSITY profile of the baryon correction model, closing the system with a
+    polytropic equation of state. The chain is:
+
+      (1) Build the BCM bound-gas density profile (Schneider & Teyssier 2015),
+          with the Arico et al. (2024) modification that the outer exponent
+          (7 - beta_gas)/2 is replaced by 2:
+
+              rho_gas(r) ~ 1 / [ (1 + r/r_co)^beta_gas * (1 + (r/r_ej)^2)^2 ]
+
+          with r_co = theta_co * r200c, r_ej = theta_ej * r200c, and a
+          mass-dependent inner slope beta_gas(M200c) = 3 - (M_gas,c/M200c)^mu_gas
+          whose functional form is calibrated against X-ray observations.
+
+      (2) Normalise it so the total bound gas mass equals f_gas * M, where
+          f_gas = Omega_b/Omega_m - f_star is the universal gas fraction left
+          over after star formation.
+
+      (3) Close with a polytropic EoS, P_tot = P_0 rho_gas^Gamma, where Gamma is
+          set by the halo concentration and a free outer-radius parameter, and
+          P_0 is fixed by the depth of the NFW potential well:
+
+              P_0 = 4 pi G rho_s r_s^2 / rho_gas(0)^(Gamma-1) * (Gamma-1)/Gamma
+
+      (4) Convert total -> thermal pressure with f_th (Green et al. 2020, or
+          Nelson et al. 2014), since turbulence and bulk motion provide real
+          hydrostatic support that carries no thermal electron pressure.
+
+      (5) Convert gas -> electron pressure via mu/mu_e.
+
+    The headline caveat (see Appendix C): step (3) requires rho_gas(r=0), a
+    single central value, which is exactly the quantity most sensitive to how
+    the profile is regularised near r=0. Vary `theta_co` to probe this.
+
+    Parameters worth noting: `nu` is the peak height delta_c(z)/sigma(M,z),
+    required only by the Green et al. (2020) f_th. If None, falls back to the
+    mass-independent Nelson et al. (2014) form.
+    """
+    rho_crit = get_some_quantities(data, axion_dic=axion_dic)[1]     # physical Msun/Mpc^3
+    h = data['cosmos']['h']
+
+    if r_s is None and conc is None:
+        rho_s, r_s, conc = _rho_s_and_rs(data, M_arr, r_t, axion_dic=axion_dic)
+    else:
+        rho_s = M_arr / (4. * np.pi * r_s**3 * _nfw_m(conc))
+
+    # --- mass definitions. bias applied as MASS SUBSTITUTION (see Mtot_to_MDelta) ---
+    M200c, r200c = Mtot_to_MDelta(data, r_t, M_arr, k_arr, r_arr, Del=200,
+                                   axion_dic=axion_dic, rho=rho,
+                                   reference_density="critical", bias=bias_sz)
+    M200m, r200m = Mtot_to_MDelta(data, r_t, M_arr, k_arr, r_arr, Del=200,
+                                   axion_dic=axion_dic, rho=rho,
+                                   reference_density="mean", bias=bias_sz)
+
+    # --- (1) BCM gas shape, Arico modification (7-beta)/2 -> 2 -----------------
+    beta_gas = 3. - (M_gas_c / M200c)**mu_gas                        # (n_M,)
+    r_co = theta_co * r200c
+    r_ej = theta_ej * r200c
+
+    rr = r_arr[None, :]
+    u_gas = (1. / ((1. + rr / r_co[:, None])**beta_gas[:, None]
+                   * (1. + (rr / r_ej[:, None])**2)**2))             # (n_M, n_r)
+
+    # --- (2) normalise to the universal gas fraction --------------------------
+    f_B = data['cosmos']['Omega_b_0'] / data['cosmos']['Omega_m_0']
+    f_star = A_star * (M_star_0 / M200c)**eta_star
+    f_gas = f_B - f_star
+
+    # integral of 4 pi r^2 u(r) dr out to the truncation radius, per halo
+    integrand = 4. * np.pi * r_arr[None, :]**2 * u_gas
+    integrand = np.where(r_arr[None, :] <= r_t[:, None], integrand, 0.0)
+    I_vol = simpson(integrand, x=r_arr, axis=1)             # (Mpc/h)^3
+
+    rho_gas_0 = f_gas * M_arr / I_vol                                 # h-units
+    rho_gas = rho_gas_0[:, None] * u_gas
+
+    # --- (3) polytropic closure ----------------------------------------------
+    x_out = conc * theta_out
+    Gamma = 1. + ((1. + x_out) * np.log(1. + x_out) - x_out) \
+                 / ((1. + 3. * x_out) * np.log(1. + x_out))           # (n_M,)
+
+    # 4 pi G rho_s r_s^2 is h-invariant (see module docstring); units (km/s)^2
+    phi_scale = 4. * np.pi * _G * rho_s * r_s**2
+    P_0 = phi_scale / rho_gas_0**(Gamma - 1.) * (Gamma - 1.) / Gamma
+
+    P_tot = P_0[:, None] * rho_gas**Gamma[:, None]                    # (km/s)^2 * h-unit rho
+    P_tot = P_tot * h**2                                              # -> physical Msun(km/s)^2/Mpc^3
+
+    # --- (4) thermal fraction, (5) electron pressure --------------------------
+    x_200m = r_arr[None, :] / r200m[:, None]
+    if f_th_model == "green2020" and nu is not None:
+        f_th = f_th_green2020(x_200m, np.asarray(nu)[:, None])
+    else:
+        f_th = f_th_nelson2014(x_200m)
+
+    P_e = _to_keV_per_cm3(P_tot) * f_th * (_MU / _MU_E)
+    P_e = np.where(r_arr[None, :] > r_t[:, None], 0.0, P_e)
+
+    if full_output:
+        M500, r500 = Mtot_to_MDelta(data, r_t, M_arr, k_arr, r_arr, Del=500,
+                                     axion_dic=axion_dic, rho=rho,
+                                     reference_density="critical", bias=bias_sz)
+        return P_e, r500, dict(Gamma=Gamma, rho_gas=rho_gas, f_gas=f_gas,
+                               beta_gas=beta_gas, f_th=f_th, P_tot=P_tot)
+    return P_e
+
+
+# ===========================================================================
+# 2. Baryon pasting: polytropic gas in hydrostatic equilibrium
+# ===========================================================================
+def pressure_profile_baryon_pasting(
+        data, axion_dic, rho, r_t, M_arr, k_arr, r_arr,
+        nu=None,
+        Gamma=1.2,              # Shaw et al. (2010) default
+        B_param=None,           # None -> B = 1 (Arico-equivalent normalisation)
+        A_star=0.09,
+        M_star_0=2.5e11,
+        eta_star=0.32,
+        bias_sz=1.0,
+        f_th_model="nelson2014",
+        full_output=False, r_s=None, conc=None):
+    """
+    WHAT THIS DOES
+    --------------
+    This is the opposite logical direction to the Arico prescription above.
+    Instead of imposing a gas density profile and deriving pressure from it,
+    baryon pasting imposes HYDROSTATIC EQUILIBRIUM plus a polytropic EoS and
+    *derives* both the density and the pressure profile from the NFW potential.
+
+    Combining dP/dr = -rho_gas dphi/dr with P = P_0 rho_gas^Gamma and integrating
+    gives the Komatsu & Seljak (2001) analytic solution; for an NFW potential,
+    phi(r) - phi(0) = 4 pi G rho_s r_s^2 [1 - ln(1+x)/x] with x = r/r_s, so
+
+        rho_gas(r) = rho_gas,0 * y(r)^{1/(Gamma-1)}
+        P_tot(r)   = P_gas,0   * y(r)^{Gamma/(Gamma-1)}
+        y(r)       = 1 - B [1 - ln(1+x)/x]
+
+    with the single dimensionless amplitude
+        B = (Gamma-1)/Gamma * 4 pi G rho_s r_s^2 * rho_gas,0 / P_gas,0.
+
+    Note the connection to the Arico model: B = 1 is exactly equivalent to
+    Arico's choice of P_0. Setting B_param=None reproduces that, which makes the
+    two prescriptions differ ONLY in whether the gas density profile is imposed
+    (BCM shape) or derived (HSE) -- a clean way to isolate that one choice.
+
+    rho_gas,0 is then fixed by gas-mass conservation, M_gas(<r_t) = f_gas * M,
+    which is one of the three boundary conditions used in the full BP model.
+
+    SCOPE / HONESTY NOTE
+    --------------------
+    The full Ostriker-Bode-Babul / Shaw et al. model determines the amplitudes
+    from THREE conditions -- gas mass conservation, a surface pressure boundary
+    condition, and energy conservation including feedback energy injection and
+    star formation. Only the first is imposed here. The energy-conservation
+    branch requires the feedback efficiency epsilon_f, epsilon_DM and the
+    star-formation parameters, whose calibrated values should be taken from
+    Flender et al. (2017) Table 3 or Lau et al. (2025) Table 1 rather than
+    guessed. Treat this as the polytropic-HSE core of the BP model, adequate for
+    a like-for-like *shape* comparison against the UPP, not as a full BP
+    reimplementation.
+    """
+    h = data['cosmos']['h']
+    if r_s is None and conc is None:
+        rho_s, r_s, conc = _rho_s_and_rs(data, M_arr, r_t, axion_dic=axion_dic)
+    else:
+        rho_s = M_arr / (4. * np.pi * r_s**3 * _nfw_m(conc))
+
+    M200c, r200c = Mtot_to_MDelta(data, r_t, M_arr, k_arr, r_arr, Del=200,
+                                   axion_dic=axion_dic, rho=rho,
+                                   reference_density="critical", bias=bias_sz)
+    M200m, r200m = Mtot_to_MDelta(data, r_t, M_arr, k_arr, r_arr, Del=200,
+                                   axion_dic=axion_dic, rho=rho,
+                                   reference_density="mean", bias=bias_sz)
+
+    B = 1.0 if B_param is None else float(B_param)
+
+    # --- HSE + polytropic solution -------------------------------------------
+    x = r_arr[None, :] / r_s[:, None]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        shape = 1. - np.log(1. + x) / x
+    shape = np.where(x < 1e-8, 0.0, shape)        # ln(1+x)/x -> 1 as x -> 0
+    y = 1. - B * shape
+    y = np.clip(y, 0.0, None)                     # gas terminates where y <= 0
+
+    u_gas = y**(1. / (Gamma - 1.))                # rho_gas / rho_gas,0
+
+    # --- gas-mass conservation fixes rho_gas,0 --------------------------------
+    f_B = data['cosmos']['Omega_b_0'] / data['cosmos']['Omega_m_0']
+    f_star = A_star * (M_star_0 / M200c)**eta_star
+    f_gas = f_B - f_star
+
+    integrand = 4. * np.pi * r_arr[None, :]**2 * u_gas
+    integrand = np.where(r_arr[None, :] <= r_t[:, None], integrand, 0.0)
+    I_vol = simpson(integrand, x=r_arr, axis=1)
+    rho_gas_0 = f_gas * M_arr / I_vol                                 # h-units
+
+    # P_gas,0 from the definition of B (h-invariant prefactor; see docstring)
+    phi_scale = 4. * np.pi * _G * rho_s * r_s**2
+    P_gas_0 = (Gamma - 1.) / Gamma * phi_scale * rho_gas_0 / B
+
+    P_tot = P_gas_0[:, None] * y**(Gamma / (Gamma - 1.))
+    P_tot = P_tot * h**2                                              # -> physical
+
+    # --- thermal fraction and electron pressure -------------------------------
+    x_200m = r_arr[None, :] / r200m[:, None]
+    if f_th_model == "green2020" and nu is not None:
+        f_th = f_th_green2020(x_200m, np.asarray(nu)[:, None])
+    else:
+        f_th = f_th_nelson2014(x_200m)
+
+    P_e = _to_keV_per_cm3(P_tot) * f_th * (_MU / _MU_E)
+    P_e = np.where(r_arr[None, :] > r_t[:, None], 0.0, P_e)
+
+    if full_output:
+        M500, r500 = Mtot_to_MDelta(data, r_t, M_arr, k_arr, r_arr, Del=500,
+                                     axion_dic=axion_dic, rho=rho,
+                                     reference_density="critical", bias=bias_sz)
+        rho_gas = rho_gas_0[:, None] * u_gas
+        return P_e, r500, dict(Gamma=Gamma, B=B, rho_gas=rho_gas, f_gas=f_gas,
+                               f_th=f_th, P_tot=P_tot)
+    return P_e
+
+############################################### BCM
+
+def get_rho_gas(r_arr, M, M200c, r200c, Omega_b, Omega_m,
+            theta_ej=4.0, theta_co=0.1, M_c=1e14, mu_gas=0.4,
+            A_star=0.09, M_star0=2.5e11, eta_star=0.3,
+            gas_type = "default",
+            gas_truncation = None):
+    f_star  = A_star * (M_star0 / M200c) ** eta_star
+    f_gas   = Omega_b / Omega_m - f_star
+    beta    = 3.0 - (M_c / M200c) ** mu_gas
+    r_co, r_ej = theta_co * r200c, theta_ej * r200c
+
+    if gas_type == "Arico":
+        profile_unnormalized = 1.0 / ((1.0 + r_arr / r_co)**beta * (1.0 + (r_arr / r_ej)**2)**(2))
+        if gas_truncation is None:
+            M_unnormalized = get_enclosed_mass(profile_unnormalized, r_t=max(r_arr), r_arr=r_arr, just_one_M=True)
+        else:
+            M_unnormalized = get_enclosed_mass(profile_unnormalized, r_t=gas_truncation, r_arr=r_arr, just_one_M=True)
+            profile_unnormalized[r_arr > gas_truncation] = 0.0
+        return (f_gas * M / M_unnormalized) * profile_unnormalized
+
+    profile_unnormalized = 1.0 / ((1.0 + r_arr / r_co)**beta * (1.0 + (r_arr / r_ej)**2)**((7.0 - beta) / 2.0))
+    if gas_truncation is None:
+        M_unnormalized = get_enclosed_mass(profile_unnormalized, r_t=max(r_arr), r_arr=r_arr, just_one_M=True)
+    else:
+        M_unnormalized = get_enclosed_mass(profile_unnormalized, r_t=gas_truncation, r_arr=r_arr, just_one_M=True)
+        profile_unnormalized[r_arr > gas_truncation] = 0.0
+
+    return (f_gas * M / M_unnormalized) * profile_unnormalized
+
+def get_rho_clm(rho_NFW, M200c, Omega_b, Omega_m,
+            A_star=0.09, M_star0=2.5e11, eta_cga=0.6, eta_star=0.3):
+    f_sga = A_star * ((M_star0 / M200c)**eta_star - (M_star0 / M200c)**eta_cga)
+    return ((Omega_m - Omega_b) / Omega_m + f_sga) * rho_NFW
+
+def get_BCM_profile(data, k_arr, r_arr, M_arr,
+                    theta_ej=4.0, theta_co=0.1, M_c=1e14, mu_gas=0.4,
+                    A_star=0.09, M_star0=2.5e11, eta_cga=0.6, eta_star=0.32,
+                    R_cga_h_frac=0.015, axion_dic=None, min_M=1e12, 
+                    gas_type="default", rho_NFW=None,
+                    gas_normalization="to_infinity"):
+    # gas type allows for the Arico modification
+    # NFW_type allows the entrance of a different NFW -> one maybe with a specific cutoff
+    Omega_b   = data['cosmos']['Omega_b_0']
+    Omega_m   = data['cosmos']['Omega_m_0']
+    r_v, rho_crit, rho_char, concentration, r_s, Delta_vir, rho_0, rho_0_wh = get_some_quantities(data)
+    if rho_NFW is None:
+        rho_NFW = get_realspace_profile(get_NFW_profile(k_arr=k_arr, r_s=r_s, r_v=r_v, r_t=max(r_arr) * r_v/r_v), 
+                            r_t=r_v, r_arr=r_arr, k_arr=k_arr, M_arr=data['M'])
+    M200c_arr, r200c_arr = Mtot_to_MDelta(
+        data, r_v, M_arr, k_arr, r_arr, Del=200, axion_dic=axion_dic, rho=rho_NFW,\
+        initial_r_index_to_try = 5, reference_density="critical"
+    )
+    
+    num_M = len(M_arr)
+    rho_cga_out = np.zeros((num_M, len(r_arr)))
+    rho_gas_out = np.zeros((num_M, len(r_arr)))
+    rho_clm_out = np.zeros((num_M, len(r_arr)))
+    rho_bcm = np.zeros((num_M, len(r_arr)))
+
+    for i in range(num_M):
+        if M_arr[i] >= min_M:
+            if gas_normalization=="to_virial":
+                gas_truncation = r_v[i]
+            else:
+                gas_truncation = None
+            rho_cga_out[i] = get_rho_cga(r_arr, M_arr[i], M200c_arr[i], r200c_arr[i],
+                                      A_star, M_star0, eta_cga, R_cga_h_frac)
+            rho_gas_out[i] = get_rho_gas(r_arr, M_arr[i], M200c_arr[i], r200c_arr[i],
+                                      Omega_b, Omega_m,
+                                      theta_ej, theta_co, M_c, mu_gas,
+                                      A_star, M_star0, eta_star, gas_type, gas_truncation)
+            rho_clm_out[i] = get_rho_clm(rho_NFW[i], M200c_arr[i], Omega_b, Omega_m,
+                                      A_star, M_star0, eta_cga, eta_star)
+        else:
+            rho_cga_out[i] = 0.0
+            rho_gas_out[i] = 0.0
+            rho_clm_out[i] = 0.0
+        rho_bcm[i] = rho_cga_out[i] + rho_gas_out[i] + rho_clm_out[i]
+    return rho_bcm, rho_cga_out, rho_gas_out, rho_clm_out

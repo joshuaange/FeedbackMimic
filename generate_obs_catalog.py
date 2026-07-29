@@ -20,11 +20,15 @@ import numpy as np
 from scipy import integrate, interpolate
 from tqdm import tqdm
 from astropy.cosmology import FlatLambdaCDM
+import cosmocnc_axionHMcode_jax.cosmocnc_jax as cosmocnc
+from axionHMcode.cosmology.variance import func_sigma_M
+from axionHMcode.cosmology.overdensities import func_delta_c
+from axionHMcode.halo_model.halo_mass_function import func_sheth_tormen
 
 from feedback_mimic import (
     dn_dlog10Mtot, get_NFW_profile, get_realspace_profile,
     dV_dz, profile_to_q, Mtot_to_MDelta, get_some_quantities,
-    get_FDM_profile, get_total_mass, get_tangential_shear
+    get_FDM_profile, get_total_mass, get_tangential_shear, dV_dz
 )
 
 # ── paths ─────────────────────────────────────────────────────────────────────
@@ -34,21 +38,40 @@ OUTPUT_DIR          = "/home/jange/scratch/FeedbackMimic/results/mock_catalogs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ── configuration (unchanged) ─────────────────────────────────────────────────
-HMF_TYPES = [
-    'FDM_preferred', 'LCDM_hat0.0', 'LCDM_hat0.5', 'LCDM_hat1.0', 'LCDM'
-]
+HMF_TYPES = ['LCDM_COSMOCNC_SR']
+WL_TYPE = "DES"
+
+#['LCDM', 'LCDM_COSMOCNC_SR',  'LCDM_COSMOCNC', 'LCDM_hat0.0', 'LCDM_hat0.5', 'LCDM_hat1.0', 'FDM_preferred']
+
+pressure_prescription = "ArnaudUPP"
+# allows ArnaudUPP, AricoBCM, baryonPasting
+# default is ArnaudUPP, others add a qualifier to the end of the catalog
+fth_prescription = ""
+# nelson2014 or green2020 -> only when not using ArnaudUPP
+if pressure_prescription == "ArnaudUPP":
+    PRESSURE_SUFFIX = ""
+elif pressure_prescription == "AricoBCM":
+    PRESSURE_SUFFIX = f"_AricoBCMPressure{fth_prescription}"
+elif pressure_prescription == "baryonPasting":
+    PRESSURE_SUFFIX = f"_baryonPastingPressure{fth_prescription}"
+else:
+    print("No valid pressure profile prescription given, defaulting to...")
+    PRESSURE_SUFFIX = ""
+print(f"Pressure Prescription {PRESSURE_SUFFIX}")
+
+SR_params = "best_fit_LCDM_DES_42"
+# Planck_SZiFi or best_fit_LCDM_DES_42
 
 INCLUDE_SHEAR_PROFILES = True
 etaz           = 0.7
 FEEDBACK_MODEL = f"etaz{etaz}_preferred_cooled"
 
 N_MOCKS_PER_TYPE = 1
-SEEDS            = [43,44,45,46,47,48,49,50,51]
-SEEDS            = [42]
+SEEDS            = [50]
 
 Q_TH  = 5.0
-Q_MIN = 3.0
-Q_FLOOR    = 1.0   # below this, contribution is provably negligible
+Q_MIN = 0.4 + 1e-6        # this just makes it be a smooth taper on the total mass of halos selected
+Q_FLOOR = 0.4
 FSKY  = 0.4
 h_fid = 0.68
 
@@ -61,12 +84,32 @@ M_target     = np.exp(ln_M_target)
 SIGMA_LN_Q_INTRINSIC = 0.173
 SIGMA_Q_OBS          = 1.0
 
-SIGMA_SHAPE = 0.37
-N_SOURCE    = 5.5
-
-# z_min ~ 0.025, r_max = 3.2/1.025 ~ 3.12, n_bins = round((3.12-0.5)/0.3)+1 = 10
-N_R_MAX = 10   # matches external likelihood's max
-DELTA_R_BOCQUET = 0.3
+if WL_TYPE == "DES":
+    SIGMA_SHAPE = 0.37
+    N_SOURCE    = 5.5
+    # z_min ~ 0.025, r_max = 3.2/1.025 ~ 3.12, n_bins = round((3.12-0.5)/0.3)+1 = 10
+    N_R_MAX = 10   # matches external likelihood's max
+    DELTA_R_BOCQUET = 0.3
+    _z_source_bins=np.array([0.285, 0.476, 0.743, 0.942])
+    wl_type_suffix = "_DES"
+elif WL_TYPE == "Euclid":
+    SIGMA_SHAPE = 0.26
+    N_SOURCE = 30.0
+    # z_min ~ 0.025, r_max = 3.2/1.025 ~ 3.12, n_bins = round((3.12-0.5)/0.3)+1 = 10
+    N_R_MAX = 10   # matches external likelihood's max
+    DELTA_R_BOCQUET = 0.3
+    _z_source_bins=np.array([0.285, 0.476, 0.743, 0.942])
+    wl_type_suffix = "_Euclid"
+elif WL_TYPE == "deepEuclid":
+    SIGMA_SHAPE = 0.26
+    N_SOURCE = 30.0
+    # z_min ~ 0.025, r_max = 3.2/1.025 ~ 3.12, n_bins = round((3.12-0.5)/0.3)+1 = 10
+    N_R_MAX = 10   # matches external likelihood's max
+    DELTA_R_BOCQUET = 0.3
+    _z_source_bins = np.array([0.3195, 0.4941, 0.6206, 0.7338, 0.8440,
+                                    0.9581, 1.0841, 1.2336, 1.4331, 1.7875])
+    wl_type_suffix = "_deepEuclid"
+print(f"WL Type {WL_TYPE}")
 
 M_MIN        = 1e11
 M_MAX        = 1e16
@@ -81,25 +124,116 @@ Z_ARR = Z_ARR[Z_ARR > 0]
 K_ARR = np.logspace(-6, 6, 8192)
 R_ARR = np.logspace(-4, np.log10(1 / K_ARR.min()), 1500)
 
-file_theta_500_vec, file_sigma_sz_vec = np.load(
-    "/home/jange/scratch/FeedbackMimic/cosmocnc_axionHMcode_jax/cosmocnc_jax/data/so_sim_sz_mf_noise.npy")
-file_theta_500_vec *= 180. * 60. / np.pi
-sigma_sz_poly = np.polyfit(
-    np.log(file_theta_500_vec), np.log(file_sigma_sz_vec), deg=3)
+H_FID = 0.68
+#####################
+if 'LCDM_COSMOCNC' in HMF_TYPES or 'LCDM_COSMOCNC_SR' in HMF_TYPES:
+    import os
+    os.environ["TOMOGRAPHIC_BINS"] = WL_TYPE
+    from mcmc_likelihood import get_log_likelihood
+    ln_L, nc = get_log_likelihood(
+        catalogue_name = f"/home/jange/scratch/FeedbackMimic/results/mock_catalogs/LCDM{wl_type_suffix}_mock_seed50.pkl",
+        omega_m  = 0.143344,
+        A_s      = 2.1e-9,
+        A_sz     = -4.3054, # just default vals from cosmocnc paper
+        alpha_sz = 1.1233,
+        beta_sz  = 2.0,
+        b_WL_0   = 0.0,
+        b_WL_M   = 1.0,
+        return_nc = True,
+        n_points = 1000,
+        n_mass_points_coarse = 1000
+    )
+if 'LCDM_COSMOCNC_SR' in HMF_TYPES:
+    from cosmocnc_axionHMcode_jax.cosmocnc_jax.surveys.survey_sr_so_sim import (
+        precompute_q_prefactors, sr_q_so_sim_layer0, sr_q_so_sim_layer1
+    )
+    
+    def q_via_survey_sr(M500c_h, z, nc, A_sz, alpha_sz, beta_sz, bias_sz, dof, h_fid=H_FID):
+        """
+        Computes q per-halo using the EXACT algorithm survey_sr_so_sim.py's
+        sr_q_so_sim_layer0/layer1 use in the real likelihood, in place of
+        feedback_mimic's profile_to_q integral method. Deliberately uses nc's
+        OWN D_A/E_z (the same emulator-derived values the real likelihood
+        consumes) rather than an independent reference -- this catalog is meant
+        to inherit whatever the likelihood's own machinery produces, so any
+        comparison against the LCDM_COSMOCNC catalog isolates exactly the
+        profile-integral-vs-analytic-formula question, nothing else.
+        """
+        iz = np.argmin(np.abs(np.asarray(nc.redshift_vec) - z))
+        E_z_val, D_A_val = float(nc.E_z[iz]), float(nc.D_A[iz])
+        H0_val = h_fid * 100.
+    
+        prefactor_logy0, prefactor_M_500_to_theta = precompute_q_prefactors(
+            E_z_val, H0_val, D_A_val, A_sz, bias_sz, alpha_sz, beta_sz)
+    
+        M500c_phys = np.asarray(M500c_h) / h_fid
+        x0_500 = np.log(M500c_phys / 1e14)
+        sr = nc.scaling_relations['q_so_sim']
+        sigma_sz_poly = sr.sigma_sz_poly
+        log_theta_min = sr.log_theta_min          # same bounds object the
+        log_theta_max = sr.log_theta_max          # likelihood itself uses
+
+        x1, _ = sr_q_so_sim_layer0(x0_500, prefactor_logy0, prefactor_M_500_to_theta,
+                                     sigma_sz_poly, alpha_sz,
+                                     log_theta_min, log_theta_max)
+        q = sr_q_so_sim_layer1(x1, prefactor_logy0, prefactor_M_500_to_theta, dof)
+        return np.asarray(q)
+#####################
+from cosmocnc_axionHMcode_jax.cosmocnc_jax.mass_conversion import _nfw_m, _nfw_m_prime
+def nfw_m500c_conversions(c500c, n_iter=15):
+    """Given c500c, returns (M200c/M500c, c200c) from the same Newton solve."""
+    m_c500 = _nfw_m(c500c)
+    def step(_, y):
+        cy = c500c * y
+        mc = _nfw_m(cy)
+        F  = 2.5 * y**(-3) - m_c500 / mc
+        Fp = -7.5 * y**(-4) + (m_c500 * c500c * _nfw_m_prime(cy)) / (mc**2)
+        return y - F / Fp
+    y0 = np.full_like(c500c, 1.5)
+    y = y0
+    for i in range(n_iter):
+        y = step(i, y)
+    M200_over_M500 = (y**3) / 2.5
+    c200c = c500c * y
+    return M200_over_M500, c200c
+    
+def build_cosmocnc_hmf_M200c(nc, z_request, ln_M200c_target_Msol_h, data):
+    ln_M_nc = np.asarray(nc.ln_M)
+    M_nc_phys   = np.exp(ln_M_nc) * 1e14
+    M_nc_Msol_h = np.exp(ln_M_nc) * 1e14 * H_FID
+    ln_M_nc_Msol_h = np.log(M_nc_Msol_h)
+    redshift_vec_nc = np.asarray(nc.redshift_vec)
+    iz_nc = np.argmin(np.abs(redshift_vec_nc - z_request))
+
+    hmf_matrix_nc   = np.asarray(nc.hmf_matrix).copy()[iz_nc]
+    hmf_matrix_nc  /= nc.cosmology.background_cosmology.differential_comoving_volume(z_request).value # dn/dlnM500c in physical units
+    hmf_matrix_nc  /= M_nc_phys # dn/dM500c
+    # divide by h^4 to get to h-units -> dn/dM200c in h units
+    M200c = nfw_m500c_conversions(nc.profile_params['concentration_500c'])[0][iz_nc] * M_nc_phys # M200c, physical Msol
+    dM500_dM200 = np.gradient(M_nc_phys) / np.gradient(M200c)
+    hmf_matrix_nc  *= dM500_dM200 # dn/dlnM200c in physical units
+    #hmf_matrix_nc  /= H_FID**4 # dn/dM200c in h units
+    #hmf_matrix_nc  *= M200c*H_FID # dn/dlnM200c in h units
+    hmf_matrix_nc  *= M200c
+    hmf_on_target_grid = np.interp(
+        ln_M200c_target_Msol_h, np.log(M200c * H_FID), hmf_matrix_nc,
+        left=0., right=0.)
+    return hmf_on_target_grid
+
 
 
 # ── CDF-inversion sampler (unchanged) ─────────────────────────────────────────
-
+'''
 def _get_samples_pdf_1d(n_samples, x, cdf):
     cdf = cdf / np.max(cdf)
     u   = np.random.rand(n_samples)
     return np.interp(u, cdf, x)
 
-
 def get_samples_pdf_2d(n_samples, x_arr, y_arr, pdf_xy):
     eps = 1e-12
     pdf_x  = np.sum(pdf_xy, axis=1) * (y_arr[1] - y_arr[0])
-    cdf_x  = np.cumsum(pdf_x) * (x_arr[1] - x_arr[0])
+    #cdf_x  = np.cumsum(pdf_x) * (x_arr[1] - x_arr[0])
+    cdf_x = scipy.integrate.cumulative_simpson(pdf_x, x=x_arr, initial=0.0)
     x_samp = _get_samples_pdf_1d(n_samples, x_arr, cdf_x)
 
     cdf_y_given_x = np.cumsum(pdf_xy, axis=1) * (y_arr[1] - y_arr[0])
@@ -119,7 +253,61 @@ def get_samples_pdf_2d(n_samples, x_arr, y_arr, pdf_xy):
         y_samp[i] = np.interp(ui, np.clip(cdf_i, 0, 1), y_arr)
 
     return x_samp, y_samp
+'''
+from scipy import integrate
+from scipy.interpolate import PchipInterpolator
 
+def _get_samples_pdf_1d(n_samples, x, cdf):
+    """
+    Inverse-transform sampling via monotone cubic (PCHIP) interpolation of
+    a Simpson-integrated CDF, replacing linear interpolation of a
+    cumsum-based CDF. Fixes a several-percent, statistically significant
+    bias (excess near rising edges/peaks, deficit through curved tails)
+    that the original method introduced at finite grid resolution.
+
+    NOTE: signature now takes the PDF values (not a precomputed cdf) and
+    the x-grid, since we need Simpson integration here rather than cumsum.
+    """
+    cdf_vals = integrate.cumulative_simpson(cdf, x=x, initial=0.0)
+    cdf_vals = cdf_vals / cdf_vals[-1]
+    # PCHIP requires strictly increasing x-data (here, the cdf values);
+    # de-duplicate any flat/repeated cdf values (e.g. in zero-pdf regions)
+    cdf_u, idx = np.unique(cdf_vals, return_index=True)
+    x_u = x[idx]
+    inv_cdf = PchipInterpolator(cdf_u, x_u, extrapolate=True)
+    u = np.random.rand(n_samples)
+    return inv_cdf(np.clip(u, cdf_u[0], cdf_u[-1]))
+
+
+def get_samples_pdf_2d(n_samples, x_arr, y_arr, pdf_xy):
+    eps = 1e-12
+    pdf_x = integrate.simpson(pdf_xy, x=y_arr, axis=1)
+    x_samp = _get_samples_pdf_1d(n_samples, x_arr, pdf_x)
+
+    n_x = pdf_xy.shape[0]
+    cdf_y_given_x = np.zeros_like(pdf_xy)
+    for ix in range(n_x):
+        row_cdf = integrate.cumulative_simpson(pdf_xy[ix], x=y_arr, initial=0.0)
+        mx = row_cdf[-1]
+        cdf_y_given_x[ix] = row_cdf / mx if mx > eps else row_cdf
+
+    ix_nearest = np.argmin(np.abs(x_arr[:, None] - x_samp[None, :]), axis=0)
+    u = np.random.rand(n_samples)
+    y_samp = np.zeros(n_samples)
+
+    # build one PCHIP per unique row, invert all samples sharing it at once
+    for ix in np.unique(ix_nearest):
+        row_cdf = cdf_y_given_x[ix]
+        cdf_u, idx = np.unique(row_cdf, return_index=True)
+        mask = (ix_nearest == ix)
+        if len(cdf_u) < 2:
+            y_samp[mask] = y_arr[idx[0]] if len(idx) else y_arr[0]
+            continue
+        y_u = y_arr[idx]
+        inv_cdf = PchipInterpolator(cdf_u, y_u, extrapolate=True)
+        y_samp[mask] = inv_cdf(np.clip(u[mask], cdf_u[0], cdf_u[-1]))
+
+    return x_samp, y_samp
 
 # ── shear radial bins (unchanged) ─────────────────────────────────────────────
 def shape_noise_per_bin(R_bins_Mpc_over_h, DA_Mpc_over_h):
@@ -154,7 +342,7 @@ def load_slice(z, hmf_type):
         with open(f"{HALO_INPUT_FILE}/{z}_data_LCDM_full2h_preferred.pkl", "rb") as f:
             data = pickle.load(f)
         Mtot, hmf_log10 = dn_dlog10Mtot(data, hmf_type)
-        hmf  = hmf_log10 / np.log(10)
+        hmf  = hmf_log10 / np.log(10) # dn/dlnMvir in h units
         axion_dic = None
         r_t, rho_crit, rho_char, concentration, r_s, Delta_vir, rho_0, rho_0_wh = \
             get_some_quantities(data, axion_dic=axion_dic)
@@ -175,10 +363,29 @@ def load_slice(z, hmf_type):
             data, r_arr=R_ARR, M_arr=data['M_CDM'], k_arr=K_ARR, full_output=True)
         rho = rho_ax + rho_c
 
+    elif hmf_type in ('LCDM_COSMOCNC', 'LCDM_COSMOCNC_SR'):
+        with open(f"{HALO_INPUT_FILE}/{z}_data_LCDM_full2h_preferred.pkl", "rb") as f:
+            data = pickle.load(f)
+        Mtot = data['M']
+        axion_dic = None
+        r_t, rho_crit, rho_char, concentration, r_s, Delta_vir, rho_0, rho_0_wh = \
+            get_some_quantities(data, axion_dic=axion_dic)
+        rho  = get_realspace_profile(
+            u_k=get_NFW_profile(r_v=r_t, k_arr=K_ARR, r_s=r_s, r_t=r_t),
+            r_arr=R_ARR, k_arr=K_ARR, M_arr=Mtot, r_t=r_t)
+        M200c, R200c = Mtot_to_MDelta(
+            data, r_t=r_t, M_arr=Mtot, r_arr=R_ARR,
+            Del=200, reference_density="critical",
+            axion_dic=None, rho=rho, k_arr=K_ARR)
+
+        hmf = np.array([
+            build_cosmocnc_hmf_M200c(nc, z, np.log(m), data) for m in M200c
+        ]) # dn/dlnM200c, in h-units
+
     else:
         raise ValueError(f"Unknown hmf_type: {hmf_type}")
 
-    return data, Mtot, hmf, rho, r_t, axion_dic
+    return data, Mtot, hmf, rho, r_t, axion_dic, concentration
 
 
 if INCLUDE_SHEAR_PROFILES:
@@ -188,7 +395,7 @@ if INCLUDE_SHEAR_PROFILES:
     _Msol_kg = 1.989e30
 
     def compute_Sigma_crit_arr(omega_m, h_fid=h_fid,
-                                _z_source_bins=np.array([0.285, 0.476, 0.743, 0.942])):
+                                _z_source_bins=_z_source_bins):
         """Unchanged from original. Returns Sigma_crit in Msol/h/(Mpc/h)²."""
         Om0   = omega_m / h_fid**2
         cosmo = FlatLambdaCDM(H0=h_fid * 100.0, Om0=Om0)
@@ -252,7 +459,7 @@ def generate_mock_catalog(hmf_type, seed=42):
 
     for i, z in tqdm(enumerate(Z_ARR), total=len(Z_ARR), desc="Building HMF grid"):
 
-        data, Mtot, hmf, rho, r_t, axion_dic = load_slice(z, hmf_type)
+        data, Mtot, hmf, rho, r_t, axion_dic, concentration = load_slice(z, hmf_type)
 
         if INCLUDE_SHEAR_PROFILES:
             if Sigma_crit_arr is None:
@@ -271,6 +478,7 @@ def generate_mock_catalog(hmf_type, seed=42):
         hmf   = hmf[valid]
         rho   = rho[valid]
         r_t   = r_t[valid]
+        concentration = concentration[valid]
         r_s_valid = r_s_full[valid]   # Mpc/h, on same mass grid as Mtot
 
         M200c, R200c = Mtot_to_MDelta(
@@ -278,12 +486,71 @@ def generate_mock_catalog(hmf_type, seed=42):
             Del=M_DELTA, reference_density=M_REF_DENS,
             axion_dic=axion_dic, rho=rho, k_arr=K_ARR)
 
-        hmf_M200c = hmf * np.gradient(np.log(Mtot)) / np.gradient(np.log(M200c))
+        # getting to dn/dlnM200c in h units
+        if hmf_type in ('LCDM_COSMOCNC', 'LCDM_COSMOCNC_SR'):
+            hmf_M200c = hmf
+        else:
+            hmf_M200c = hmf * np.gradient(np.log(Mtot)) / np.gradient(np.log(M200c)) # dn/dlnM200c
 
-        q_of_M200c = profile_to_q(
-            data, axion_dic=axion_dic, rho=rho, r_t=r_t,
-            M_arr=Mtot, k_arr=K_ARR, r_arr=R_ARR,
-            bias_sz=0.8, dof=0.0)
+        if hmf_type == 'LCDM_COSMOCNC_SR':
+            M500c, R500c = Mtot_to_MDelta(
+                data, r_t=r_t, M_arr=Mtot, r_arr=R_ARR, Del=500,
+                reference_density=M_REF_DENS, axion_dic=axion_dic, rho=rho, k_arr=K_ARR)
+            if SR_params == "Planck_SZiFi":
+                q_of_M200c = q_via_survey_sr(M500c, z, nc, A_sz=-4.3054, alpha_sz=1.1233,
+                                               beta_sz=2.0, bias_sz=0.8, dof=0.0, h_fid=h_fid)
+            elif SR_params == "best_fit_LCDM_DES_42":
+                q_of_M200c = q_via_survey_sr(M500c, z, nc, A_sz=-4.35335510, alpha_sz=1.19949642e+00,
+                                               beta_sz=2.00044816, bias_sz=0.8, dof=0.0, h_fid=h_fid)
+        else:
+            if pressure_prescription == "AricoBCM":
+                HM_sigma = func_sigma_M(Mtot, data['power_spec_dic']['k'], data['power_spec_dic']['power_total'], data['cosmos']['Omega_m_0'])
+                HM_delta_c = func_delta_c(z, 
+                                          data['cosmos']['Omega_ax_0'], data['cosmos']['Omega_m_0'], data['cosmos']['Omega_w_0'], 
+                                          data['cosmos']['G_a'], data['cosmos']['version'])
+                HM_nu = HM_delta_c / HM_sigma
+                
+                q_of_M200c = profile_to_q(
+                    data, axion_dic=axion_dic, rho=rho, r_t=r_t,
+                    M_arr=Mtot, k_arr=K_ARR, r_arr=R_ARR,
+                    bias_sz=0.8, dof=0.0, 
+                    nu=HM_nu,
+                    theta_out=4.0,          # sets the polytropic index
+                    theta_co=0.1,           # BCM core radius / r200c   (fixed in BCM)
+                    theta_ej=4.0,           # BCM ejection radius / r200c
+                    M_gas_c=1.2e14,         # beta_gas pivot mass, Msun/h
+                    mu_gas=0.31,            # beta_gas slope
+                    A_star=0.09,            # BCM stellar normalisation
+                    M_star_0=2.5e11,        # BCM stellar pivot, Msun/h
+                    eta_star=0.32,          # total stellar fraction slope
+                    f_th_model=fth_prescription,
+                    pressure_profile_prescription = "AricoBCM",
+                    r_s = r_s_valid, conc = concentration)
+            elif pressure_prescription == "baryonPasting":
+                HM_sigma = func_sigma_M(Mtot, data['power_spec_dic']['k'], data['power_spec_dic']['power_total'], data['cosmos']['Omega_m_0'])
+                HM_delta_c = func_delta_c(z, 
+                                          data['cosmos']['Omega_ax_0'], data['cosmos']['Omega_m_0'], data['cosmos']['Omega_w_0'], 
+                                          data['cosmos']['G_a'], data['cosmos']['version'])
+                HM_nu = HM_delta_c / HM_sigma
+                
+                q_of_M200c = profile_to_q(
+                    data, axion_dic=axion_dic, rho=rho, r_t=r_t,
+                    M_arr=Mtot, k_arr=K_ARR, r_arr=R_ARR,
+                    bias_sz=0.8, dof=0.0, 
+                    nu=HM_nu,
+                    Gamma=1.2,              # Shaw et al. (2010) default
+                    B_param=None,           # None -> B = 1 (Arico-equivalent normalisation)
+                    A_star=0.09,
+                    M_star_0=2.5e11,
+                    eta_star=0.32,
+                    f_th_model=fth_prescription,
+                    pressure_profile_prescription = "baryonPasting",
+                    r_s = r_s_valid, conc = concentration)
+            else:
+                q_of_M200c = profile_to_q(
+                    data, axion_dic=axion_dic, rho=rho, r_t=r_t,
+                    M_arr=Mtot, k_arr=K_ARR, r_arr=R_ARR,
+                    bias_sz=0.8, dof=0.0, pressure_profile_prescription = pressure_prescription)
 
         #q_min_mask       = q_of_M200c >= Q_MIN
         #hmf_M200c_masked = hmf_M200c * q_min_mask
@@ -349,6 +616,20 @@ def generate_mock_catalog(hmf_type, seed=42):
     sel   = q_obs > Q_TH
     n_sel = sel.sum()
     print(f"  Selected N (q_obs > {Q_TH}) : {n_sel}")
+
+    all_halos_catalog = {
+        'z'          : z_samp,        # (n_tot,)
+        'M200c_true' : M200c_samp,    # (n_tot,) Msol/h
+        'q_mean'     : q_mean,        # (n_tot,) noiseless q-M scaling relation
+        'hmf_type'   : hmf_type,
+        'seed'       : seed,
+        'n_tot_mean' : float(n_mean),
+        'n_tot_draw' : n_tot,
+        'mass_units' : 'Msol/h',
+        'h_fid'      : h_fid,
+        'FSKY'       : FSKY,
+        'Z_ARR'      : Z_ARR,
+    }
 
     z_cat     = z_samp[sel]
     M200c_cat = M200c_samp[sel]
@@ -480,7 +761,7 @@ def generate_mock_catalog(hmf_type, seed=42):
         }
     }
 
-    return catalog
+    return catalog, all_halos_catalog
 
 
 # ── run ───────────────────────────────────────────────────────────────────────
@@ -488,13 +769,22 @@ def generate_mock_catalog(hmf_type, seed=42):
 if __name__ == "__main__":
 
     for hmf_type in HMF_TYPES:
+        SRparams_suffix = ""
+        if hmf_type == 'LCDM_COSMOCNC_SR':
+            if SR_params == "Planck_SZiFi":
+                SRparams_suffix = ""
+            elif SR_params == "best_fit_LCDM_DES_42":
+                SRparams_suffix = "-SR_best_fit_LCDM_DES_42"
         for seed in SEEDS:
-            catalog   = generate_mock_catalog(hmf_type, seed=seed)
+            catalog, all_halos_catalog   = generate_mock_catalog(hmf_type, seed=seed)
             safe_name = hmf_type.replace('.', 'p')
-            out_path  = f"{OUTPUT_DIR}/{safe_name}_mock_seed{seed}.pkl"
+            out_path  = f"{OUTPUT_DIR}/{safe_name}{PRESSURE_SUFFIX}{wl_type_suffix}{SRparams_suffix}_mock_seed{seed}.pkl"
+            all_halos_path = f"{OUTPUT_DIR}/{safe_name}{PRESSURE_SUFFIX}{wl_type_suffix}{SRparams_suffix}_mock_seed{seed}_noselection.pkl"
 
             with open(out_path, "wb") as f:
                 pickle.dump(catalog, f)
+            with open(all_halos_path, "wb") as f:
+                pickle.dump(all_halos_catalog, f)
 
             '''
             print(f"  Saved -> {out_path}")

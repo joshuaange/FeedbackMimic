@@ -38,7 +38,7 @@ OUTPUT_DIR          = "/home/jange/scratch/FeedbackMimic/results/mock_catalogs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ── configuration (unchanged) ─────────────────────────────────────────────────
-HMF_TYPES = ['LCDM_COSMOCNC_SR']
+HMF_TYPES = ['LCDM_COSMOCNC_SR', 'LCDM_COSMOCNC']
 WL_TYPE = "DES"
 
 #['LCDM', 'LCDM_COSMOCNC_SR',  'LCDM_COSMOCNC', 'LCDM_hat0.0', 'LCDM_hat0.5', 'LCDM_hat1.0', 'FDM_preferred']
@@ -59,14 +59,15 @@ else:
     PRESSURE_SUFFIX = ""
 print(f"Pressure Prescription {PRESSURE_SUFFIX}")
 
-SR_params = "best_fit_LCDM_DES_42"
-# Planck_SZiFi or best_fit_LCDM_DES_42
+SR_params = "bestfitSR"
+# PlanckSZiFi or bestfitSR
 
 INCLUDE_SHEAR_PROFILES = True
 etaz           = 0.7
 FEEDBACK_MODEL = f"etaz{etaz}_preferred_cooled"
 
 N_MOCKS_PER_TYPE = 1
+SEEDS            = [51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75]
 SEEDS            = [50]
 
 Q_TH  = 5.0
@@ -134,9 +135,9 @@ if 'LCDM_COSMOCNC' in HMF_TYPES or 'LCDM_COSMOCNC_SR' in HMF_TYPES:
         catalogue_name = f"/home/jange/scratch/FeedbackMimic/results/mock_catalogs/LCDM{wl_type_suffix}_mock_seed50.pkl",
         omega_m  = 0.143344,
         A_s      = 2.1e-9,
-        A_sz     = -4.3054, # just default vals from cosmocnc paper
-        alpha_sz = 1.1233,
-        beta_sz  = 2.0,
+        A_sz     = -4.352890598769685,
+        alpha_sz = 1.1991734303623067,
+        beta_sz  = 1.9996943667059135,
         b_WL_0   = 0.0,
         b_WL_M   = 1.0,
         return_nc = True,
@@ -496,12 +497,12 @@ def generate_mock_catalog(hmf_type, seed=42):
             M500c, R500c = Mtot_to_MDelta(
                 data, r_t=r_t, M_arr=Mtot, r_arr=R_ARR, Del=500,
                 reference_density=M_REF_DENS, axion_dic=axion_dic, rho=rho, k_arr=K_ARR)
-            if SR_params == "Planck_SZiFi":
+            if SR_params == "PlanckSZiFi":
                 q_of_M200c = q_via_survey_sr(M500c, z, nc, A_sz=-4.3054, alpha_sz=1.1233,
                                                beta_sz=2.0, bias_sz=0.8, dof=0.0, h_fid=h_fid)
-            elif SR_params == "best_fit_LCDM_DES_42":
-                q_of_M200c = q_via_survey_sr(M500c, z, nc, A_sz=-4.35335510, alpha_sz=1.19949642e+00,
-                                               beta_sz=2.00044816, bias_sz=0.8, dof=0.0, h_fid=h_fid)
+            elif SR_params == "bestfitSR":
+                q_of_M200c = q_via_survey_sr(M500c, z, nc, A_sz=-4.352890598769685, alpha_sz=1.1991734303623067,
+                                               beta_sz=1.9996943667059135, bias_sz=0.8, dof=0.0, h_fid=h_fid)
         else:
             if pressure_prescription == "AricoBCM":
                 HM_sigma = func_sigma_M(Mtot, data['power_spec_dic']['k'], data['power_spec_dic']['power_total'], data['cosmos']['Omega_m_0'])
@@ -771,10 +772,10 @@ if __name__ == "__main__":
     for hmf_type in HMF_TYPES:
         SRparams_suffix = ""
         if hmf_type == 'LCDM_COSMOCNC_SR':
-            if SR_params == "Planck_SZiFi":
+            if SR_params == "PlanckSZiFi":
+                SRparams_suffix = "_PlanckSZiFi"
+            elif SR_params == "bestfitSR":
                 SRparams_suffix = ""
-            elif SR_params == "best_fit_LCDM_DES_42":
-                SRparams_suffix = "-SR_best_fit_LCDM_DES_42"
         for seed in SEEDS:
             catalog, all_halos_catalog   = generate_mock_catalog(hmf_type, seed=seed)
             safe_name = hmf_type.replace('.', 'p')

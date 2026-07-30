@@ -33,7 +33,7 @@ verbose = False
 
 INPUT_DIR   = "/home/jange/scratch/FeedbackMimic/results/halo_model"
 INPUT_SUFFIX = "full2h"   # set to '' to load files without the full2h suffix
-Z                  = 0.0
+Z                  = 2.0 # 0.0, 0.5, 1.0, 1.5, 2.0
 NUM_ITERATIONS     = 25
 GAMMA_SCALINGS     = [0.0]
 K_ARR  = np.logspace(-6, 6, 8192)

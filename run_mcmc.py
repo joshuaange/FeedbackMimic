@@ -3,19 +3,25 @@ MCMC using cobaya: fit cluster counts + shear to mock catalogue.
 """
 import os
 
+_NT = os.environ.get("NT", "1")
 os.environ["TF_NUM_INTEROP_THREADS"] = "1"
-os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
-os.environ["XLA_FLAGS"]              = "--xla_cpu_multi_thread_eigen=false"
-os.environ["OMP_NUM_THREADS"]        = "1"
-os.environ["MKL_NUM_THREADS"]        = "1"
-os.environ["OPENBLAS_NUM_THREADS"]   = "1"
+os.environ["TF_NUM_INTRAOP_THREADS"] = _NT
+if _NT == "1":
+    os.environ["XLA_FLAGS"] = "--xla_cpu_multi_thread_eigen=false"
+os.environ["OMP_NUM_THREADS"]      = _NT
+os.environ["MKL_NUM_THREADS"]      = _NT
+os.environ["OPENBLAS_NUM_THREADS"] = _NT
+
 os.environ["JAX_PLATFORMS"]          = "cpu"
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["JAX_ENABLE_X64"]         = "1"
 os.environ.pop("DISPLAY", None)
 
-_RAM_PER_CHAIN_GB = 8
-N_CORES_PER_CHAIN = 1
+# NT=6 nice -n 5 mpirun -n 8 python run_mcmc.py
+
+_RAM_PER_CHAIN_GB = 12
+N_CORES_PER_CHAIN = int(_NT)
+
 try:
     mpi_rank    = int(os.environ.get("OMPI_COMM_WORLD_RANK", os.environ.get("PMI_RANK", 0)))
     core_offset = int(os.environ.get("CORE_OFFSET", "0"))          # NEW
@@ -37,74 +43,50 @@ from cobaya.likelihood import Likelihood
 from cobaya.run import run
 from threadpoolctl import threadpool_limits
 
+from mpi4py import MPI
 
-mock_obs_type = "LCDM_DES_42" 
+COMM = MPI.COMM_WORLD
+RANK = COMM.Get_rank()
+SIZE = COMM.Get_size()
+
+print(f"MPI rank {RANK}/{SIZE} starting", flush=True)
+
+
+mock_obs_type = "LCDM_DES_mock_seed50" 
 import os
-_tomo_bins_for = {
-    "LCDM_COSMOCNC_SR_DES_42":        "DES",
-    "LCDM_COSMOCNC_SR_Euclid_42":     "Euclid",
-    "LCDM_COSMOCNC_SR_deepEuclid_42": "deepEuclid",
-    "LCDM_COSMOCNC_SR_deepEuclid_43": "deepEuclid",
-    "LCDM_Euclid_42":                 "Euclid",
-    "LCDM_DES_42":                    "DES",
-    "LCDM_deepEuclid_42":             "deepEuclid",
-    "LCDM_COSMOCNC_DES_42":           "DES",
-}
-os.environ["TOMOGRAPHIC_BINS"] = _tomo_bins_for[mock_obs_type]
+
+os.environ["TOMOGRAPHIC_BINS"] = "DES"
 from mcmc_likelihood import get_log_likelihood, get_G_a_interp, get_D_grid_interp, get_norm_interp, get_Sigma_crit_arr
 
 # ── Paths ──────────────────────────────────────────────────────────────
 OUTPUT_DIR = "/home/jange/scratch/FeedbackMimic/results/"
 
 catalogues = {
-    # using cosmocnc hmf and scaling relation, Euclid settings, DES tomographic bins
-    # fiducial cosmology and fiducial sz params, fit WL params from WL+SZ likelihood
-    # this version finished and is converged! but it doesnt really match a real survey
-    "LCDM_COSMOCNC_SR_Euclid_42"         : f"{OUTPUT_DIR}mock_catalogs/LCDM_COSMOCNC_SR_Euclid_mock_seed42.pkl",
-    # using cosmocnc hmf and scaling relation, DES settings and tomographic bins
-    # fiducial cosmology and fiducial sz params, fit WL params from WL+SZ likelihood
-    # this version is IN PROGRESS NOW
-    "LCDM_COSMOCNC_SR_DES_42"            : f"{OUTPUT_DIR}mock_catalogs/LCDM_COSMOCNC_SR_DES_mock_seed42.pkl",
-    # using cosmocnc hmf and scaling relation, Euclid settings and tomographic bins
-    # fiducial cosmology and fiducial sz params, fit WL params from WL+SZ likelihood
-    # this version is fine, but I didn't let it finish because it was taking too long
-    "LCDM_COSMOCNC_SR_deepEuclid_42"     : f"{OUTPUT_DIR}mock_catalogs/LCDM_COSMOCNC_SR_deepEuclid_mock_seed42.pkl",
-    # same survey settings as above, but now using fiducial values for all, and assuming unbiased WL data
-    # technically using best fit SZ values as fiducial, just so chains start nearby
-    "LCDM_DES_42"                        : f"{OUTPUT_DIR}mock_catalogs/LCDM_DES_mock_seed42.pkl",
+    "LCDM_DES_mock_seed50"                        : f"{OUTPUT_DIR}mock_catalogs/LCDM_DES_mock_seed50.pkl",
+    "LCDM_DES_mock_seed60"                        : f"{OUTPUT_DIR}mock_catalogs/LCDM_DES_mock_seed60.pkl",
+    "LCDM_DES_mock_seed70"                        : f"{OUTPUT_DIR}mock_catalogs/LCDM_DES_mock_seed70.pkl",
 }
 fiducials = {
-    # these are the best fit WL values and the fiducial SZ values
-    "LCDM_COSMOCNC_SR_Euclid_42"         : (0.143344, 2.1e-09, -4.3054, 1.1233, 2.0, 0.0045708078155726450, -0.004110604522978368, 1.0009138222520058),
-    "LCDM_COSMOCNC_SR_DES_42"            : (0.143344, 2.1e-09, -4.3054, 1.1233, 2.0, 0.0029088857981244300, -0.002630105851177776, 1.0071173561538007),
-    "LCDM_COSMOCNC_SR_deepEuclid_42"     : (0.143344, 2.1e-09, -4.3054, 1.1233, 2.0, 0.0034395199296925268, -0.014496689927309434, 1.0007144789843445),
-    "LCDM_COSMOCNC_SR_deepEuclid_43"     : (0.143344, 2.1e-09, -4.3054, 1.1233, 2.0, 0.0027039327087107360, -0.001968649820663173, 0.9982272209231864),
-    # these are technically the best fit SZ values, but that doesn't impact anything other than the starting spots - assume unbiased WL prior centres
-    "LCDM_DES_42"                        : (0.143344, 2.1e-09, -4.353355099, 1.199496418, 2.000448160, 0.0, 0.0, 1.0),
+    # using the "fiducial" SZ parameters from 25 combined sims
+    "LCDM_DES_mock_seed50"                        : (0.143344, 2.1e-09, -4.352890598769685, 1.1991734303623067, 1.9996943667059135, 0.0, 0.0, 1.0),
+    "LCDM_DES_mock_seed60"                        : (0.143344, 2.1e-09, -4.352890598769685, 1.1991734303623067, 1.9996943667059135, 0.0, 0.0, 1.0),
+    "LCDM_DES_mock_seed70"                        : (0.143344, 2.1e-09, -4.352890598769685, 1.1991734303623067, 1.9996943667059135, 0.0, 0.0, 1.0),
 }
 output_names = {
-    "LCDM_COSMOCNC_SR_Euclid_42"         : f"{OUTPUT_DIR}mcmc/LCDM_COSMOCNC_SR_Euclid_42_cobaya",
-    "LCDM_COSMOCNC_SR_DES_42"            : f"{OUTPUT_DIR}mcmc/LCDM_COSMOCNC_SR_DES_42_cobaya",
-    "LCDM_COSMOCNC_SR_deepEuclid_42"     : f"{OUTPUT_DIR}mcmc/LCDM_COSMOCNC_SR_deepEuclid_42_cobaya",
-    "LCDM_Euclid_42"                     : f"{OUTPUT_DIR}mcmc/LCDM_Euclid_42_cobaya",
-    "LCDM_DES_42"                        : f"{OUTPUT_DIR}mcmc/LCDM_DES_42_cobaya",
-    "LCDM_deepEuclid_42"                 : f"{OUTPUT_DIR}mcmc/LCDM_deepEuclid_42_cobaya",
-    "LCDM_COSMOCNC_DES_42"               : f"{OUTPUT_DIR}mcmc/LCDM_COSMOCNC_DES_42_cobaya",
+    "LCDM_DES_mock_seed50"                        : f"{OUTPUT_DIR}mcmc/LCDM_DES_50_cobaya",
+    "LCDM_DES_mock_seed60"                        : f"{OUTPUT_DIR}mcmc/LCDM_DES_60_cobaya",
+    "LCDM_DES_mock_seed70"                        : f"{OUTPUT_DIR}mcmc/LCDM_DES_70_cobaya",
 }
 initial_covmats = {
-    "LCDM_COSMOCNC_SR_Euclid_42"         : None,
-    "LCDM_COSMOCNC_SR_DES_42"            : None,
-    "LCDM_COSMOCNC_SR_deepEuclid_42"     : None,
-    "LCDM_Euclid_42"                     : None,
-    "LCDM_DES_42"                        : None,
-    "LCDM_deepEuclid_42"                 : None,
-    "LCDM_COSMOCNC_DES_42"               : None,
+    "LCDM_DES_mock_seed50"                        : None,
+    "LCDM_DES_mock_seed60"                        : None,
+    "LCDM_DES_mock_seed70"                        : None,
 }
 CATALOGUE_PATH = catalogues[mock_obs_type]
 (omega_m_fid, A_s_fid, A_sz_fid, alpha_sz_fid, beta_sz_fid, b_WL0_fid, b_WLz_fid, b_WLM_fid) = fiducials[mock_obs_type]
 
 # ── Run config ─────────────────────────────────────────────────────────
-resume_run     = True
+resume_run     = False
 max_samples    = 5000
 proposal_scale = 2.38
 # mpirun -n 8 python run_mcmc.py
@@ -122,12 +104,17 @@ ns_fid       = 0.965
 
 # ── likelihood wrapper ──────────────────────────────────────────
 ln_L0, nc = get_log_likelihood(
-    catalogue_name=CATALOGUE_PATH,
-    omega_m=omega_m_fid, A_s=A_s_fid,
-    A_sz=A_sz_fid, alpha_sz=alpha_sz_fid, beta_sz=beta_sz_fid,
-    b_WL_0=b_WL0_fid, b_WL_z=b_WLz_fid, b_WL_M=b_WLM_fid,
-    return_nc=True,
-)
+                catalogue_name=CATALOGUE_PATH,
+                omega_m=omega_m_fid,
+                A_s=A_s_fid,
+                A_sz=A_sz_fid,
+                alpha_sz=alpha_sz_fid,
+                beta_sz=beta_sz_fid,
+                b_WL_0=b_WL0_fid,
+                b_WL_z=b_WLz_fid,
+                b_WL_M=b_WLM_fid,
+                return_nc=True,
+            )
 def build_cosmo_params(omega_m, A_s):
     z_table, D_grid = get_D_grid_interp(omega_m)
     return {
@@ -139,6 +126,7 @@ def build_cosmo_params(omega_m, A_s):
         "D_grid_z_precomputed": z_table, "D_grid_precomputed": D_grid,
         "normalisation_precomputed": get_norm_interp(omega_m),
         "Sigma_crit_vec": get_Sigma_crit_arr(omega_m),
+        "n_mass_points_coarse": 300,
     }
 def build_scal_rel_params(A_sz, alpha_sz, beta_sz, b_WL_0, b_WL_M, b_WL_z):
     return {
@@ -151,6 +139,7 @@ def fast_log_lik(omega_m, A_s, A_sz, alpha_sz, beta_sz, b_WL_0, b_WL_M, b_WL_z):
     nc.update_params(
         build_cosmo_params(omega_m, A_s),
         build_scal_rel_params(A_sz, alpha_sz, beta_sz, b_WL_0, b_WL_M, b_WL_z))
+    nc._static_lnM_bounds = None
     nc.get_hmf(return_profile_params=True)
     return float(nc.get_log_lik())
 
@@ -158,10 +147,11 @@ def fast_log_lik(omega_m, A_s, A_sz, alpha_sz, beta_sz, b_WL_0, b_WL_M, b_WL_z):
 class ShearCNCLikelihood(Likelihood):
 
     def initialize(self):
+            
         with open(CATALOGUE_PATH, "rb") as f:
             self.wl_cat = pickle.load(f)
         self.cat_name = CATALOGUE_PATH
-
+        
         # Warm-up JIT + cost estimate
         n_time = 3
         t0 = time.time()
@@ -182,11 +172,11 @@ class ShearCNCLikelihood(Likelihood):
         print(f"Estimated for {max_samples} samples "
               f"(5% acceptance): {t_est/60:.1f} min  ({t_est/3600:.2f} hr)")
         print("Likelihood initialised and JIT warmed up.")
-
+        
     def get_requirements(self):
         return {}  # standalone — no Boltzmann solver needed
 
-    def logp(self, omega_m, A_s, A_sz, alpha_sz, b_WL_0, b_WL_M, b_WL_z, **kwargs):
+    def logp(self, omega_m, A_s, A_sz, alpha_sz, beta_sz, b_WL_0, b_WL_M, b_WL_z, **kwargs):
         omega_m  = self.provider.get_param("omega_m")
         A_s      = self.provider.get_param("A_s")
         A_sz     = self.provider.get_param("A_sz")
@@ -196,7 +186,8 @@ class ShearCNCLikelihood(Likelihood):
         b_WL_M   = self.provider.get_param("b_WL_M")
         b_WL_z   = self.provider.get_param("b_WL_z")
         try:
-            return fast_log_lik(
+            t0 = time.time()
+            L  = fast_log_lik(
                 omega_m         = omega_m,
                 A_s             = A_s,
                 A_sz            = A_sz,
@@ -206,8 +197,21 @@ class ShearCNCLikelihood(Likelihood):
                 b_WL_M          = b_WL_M,
                 b_WL_z          = b_WL_z,
             )
+            print(f"  logp {time.time()-t0:.2f}s", flush=True)
+            return L
+        except MemoryError:
+            raise                      # never retry an OOM
         except Exception as e:
-            print(f"Theory call failed: {e}")
+            msg = str(e).lower()
+            if isinstance(e, MemoryError) or "out of memory" in msg \
+                    or "resource_exhausted" in msg or "bad_alloc" in msg:
+                print(f"[fatal] OOM in logp: {e}", flush=True)
+                raise
+            self._nfail = getattr(self, "_nfail", 0) + 1
+            if self._nfail <= 5 or self._nfail % 200 == 0:
+                print(f"[fail {self._nfail}] {type(e).__name__}: {e}  "
+                      f"om={omega_m:.5f} As={A_s:.4e} Asz={A_sz:.4f} "
+                      f"al={alpha_sz:.4f} be={beta_sz:.4f}", flush=True)
             return -np.inf
 
 
@@ -285,7 +289,7 @@ info = {
         "max_samples": max_samples,
         "learn_proposal": True,
         "learn_every": "3d",
-        "max_tries": np.inf,
+        "max_tries": 5000,
         "learn_proposal_Rminus1_max":       20.0,
         "learn_proposal_Rminus1_max_early": 1000.0,
         "proposal_scale": proposal_scale,
@@ -303,9 +307,10 @@ if __name__ == "__main__":
     import resource
     _RAM_BYTES = int(_RAM_PER_CHAIN_GB * 1024**3)
     resource.setrlimit(resource.RLIMIT_DATA, (_RAM_BYTES, _RAM_BYTES))
+    resource.setrlimit(resource.RLIMIT_AS, (_RAM_BYTES, _RAM_BYTES))
     print(f"RAM limit set to {_RAM_PER_CHAIN_GB} GB per process")
 
-    with threadpool_limits(limits=1):
+    with threadpool_limits(limits=int(_NT)):
         t0 = time.time()
         updated_info, sampler = run(info)
         print(f"Done in {(time.time()-t0)/60:.1f} min")

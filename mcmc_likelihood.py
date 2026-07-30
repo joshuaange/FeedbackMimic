@@ -36,7 +36,8 @@ _Om0_grid          = _omega_m_grid / h_fid**2
 _z_table           = np.concatenate([np.linspace(1e-6, 1., 500), np.linspace(1., 100., 500)])
 
 import os
-type_of_tomographic_bins = os.environ.get("TOMOGRAPHIC_BINS")
+#sTOMOGRAPHIC_BINS=DES python mcmc_likelihood.py
+type_of_tomographic_bins = os.environ.get("TOMOGRAPHIC_BINS", "DES")
 if type_of_tomographic_bins in ("DES", "Euclid"):
     # Euclid n_source/sigma_e still paired with DES Y3's tomographic bins
     # (the deliberate hybrid case) -- Sigma_crit depends only on the bins,
@@ -60,20 +61,36 @@ _Msol_kg = 1.989e30
 _cache_path = f"/home/jange/scratch/FeedbackMimic/results/mcmc/MCMC_GRID_CACHE{cache_suffix}.pkl"
 if os.path.exists(_cache_path):
     with open(_cache_path, "rb") as f:
-        _G_a_grid, _D_table, _norm_grid, _DA_table, _Sigma_crit_table = pickle.load(f)
+        _G_a_table, _D_table, _norm_grid, _DA_table, _Sigma_crit_table = pickle.load(f)
     print("Loaded precomputed tables from cache")
 else:
     print("Precomputing tables (one-time cost)...")
-    _G_a_grid  = np.array([
-        func_axionHMcode_D_z_unnorm_int(
-            0., Om0,
-            lambda z, c=FlatLambdaCDM(H0=h_fid*100., Om0=Om0): c.H(z).value/(h_fid*100.))
-        for Om0 in _Om0_grid])
+    def _G_a_of_z(Om0, Z=10000., n=200000):
+        """G_a(z) reproducing axionHMcode's func_D_z_unnorm_int, vectorised over z.
+           Same Z=10000 cutoff in both nested integrals as its dblquad uses."""
+        Ow0 = 1. - Om0
+        opz = np.logspace(0., np.log10(1.+Z), n)
+        z   = opz - 1.
+        E   = np.sqrt(np.abs(Om0*opz**3 + Ow0))
+        def revcum(y, x):
+            inc = (y[:-1]+y[1:])/2 * np.diff(x)
+            return np.concatenate([np.cumsum(inc[::-1])[::-1], [0.]])
+        inner = revcum(opz/E**3, z)
+        outer = revcum(E/opz * inner, z)
+        return z, 5.*Om0/2.*outer
+    _G_a_table = np.zeros((len(_omega_m_grid), len(_z_table))) #(n_omega_m, _z_table)
+    for i, Om0 in enumerate(_Om0_grid):
+        zz, GG = _G_a_of_z(Om0)
+        _G_a_table[i] = np.interp(_z_table, zz, GG)
+
+        
     _norm_grid = np.array([
     func_axionHMcode_D_z_unnorm(
         0., Om0,
         lambda z, c=FlatLambdaCDM(H0=h_fid*100., Om0=Om0): c.H(z).value/(h_fid*100.))
     for Om0 in _Om0_grid])
+
+    
     _D_table = np.zeros((len(_omega_m_grid), len(_z_table)))
     for i, Om0 in enumerate(_Om0_grid):
         cosmo_i = FlatLambdaCDM(H0=h_fid*100., Om0=Om0)
@@ -81,12 +98,16 @@ else:
         norm_i  = _norm_grid[i]
         _D_table[i] = [func_axionHMcode_D_z_unnorm(z, Om0, E_z_i) / norm_i
                        for z in _z_table]
+
+        
     _DA_table = np.zeros((len(_omega_m_grid), len(Z_ARR)))
     for i, Om0 in enumerate(_Om0_grid):
         for j, z in enumerate(Z_ARR):
             _DA_table[i, j] = comoving_distance(
                 {"cosmos": {"z": z, "h": h_fid,
                              "Omega_m_0": Om0, "Omega_w_0": 1.-Om0}}, z) / (1+z)
+
+            
     _Sigma_crit_table = np.zeros((len(_omega_m_grid), len(Z_ARR)))
     for i, Om0 in enumerate(_Om0_grid):
         cosmo_i = FlatLambdaCDM(H0=h_fid*100., Om0=Om0)
@@ -107,7 +128,7 @@ else:
                 inv_scs.append(inv_sc * _Msol_kg / _Mpc_m**2)
             _Sigma_crit_table[i, j] = 1./np.mean(inv_scs) if inv_scs else np.inf    
     with open(_cache_path, "wb") as f:
-        pickle.dump((_G_a_grid, _D_table, _norm_grid, _DA_table, _Sigma_crit_table), f)
+        pickle.dump((_G_a_table, _D_table, _norm_grid, _DA_table, _Sigma_crit_table), f)
     print("Saved tables")
 
 
@@ -118,7 +139,7 @@ def _interp_omega_m(omega_m, table):
     frac = w - i_lo
     return (1.-frac)*table[i_lo] + frac*table[i_lo+1]
 
-def get_G_a_interp(omega_m):        return np.interp(omega_m, _omega_m_grid, _G_a_grid)
+def get_G_a_interp(omega_m):        return _interp_omega_m(omega_m, _G_a_table)   # now returns an array over Z_ARR
 def get_norm_interp(omega_m):       return np.interp(omega_m, _omega_m_grid, _norm_grid)
 def get_D_grid_interp(omega_m):     return _z_table.copy(), _interp_omega_m(omega_m, _D_table)
 def get_DA_grid_interp(omega_m):    return Z_ARR.copy(),    _interp_omega_m(omega_m, _DA_table)
@@ -306,9 +327,9 @@ def get_log_likelihood(
     # ── free parameters ──
     omega_m  = omega_m_fid,
     A_s    = A_s_fid,
-    A_sz     = -4.3054,
-    alpha_sz = 1.1233,
-    beta_sz  = 2.0,
+    A_sz     = -4.352890598769685,
+    alpha_sz = 1.1991734303623067,
+    beta_sz  = 1.9996943667059135,
     b_WL_0    = 0.0, 
     b_WL_z    = 0.0,
     b_WL_M    = 1.0,
@@ -332,7 +353,7 @@ def get_log_likelihood(
     z_max = None,
     n_z = None,
     data_lik_from_abundance = False,
-    n_points_data_lik = 128,
+    n_points_data_lik = 320,
     bc_chunk_size = 2000
 ):
     z_table, D_grid = get_D_grid_interp(omega_m)
@@ -416,6 +437,8 @@ def get_log_likelihood(
     try:
         nc.get_hmf(return_profile_params=True)
         log_lik_sz_cosmocnc = nc.get_log_lik()
+    except MemoryError:
+        raise                      # never retry an OOM
     except Exception as e:
         print(f"cosmocnc_jax failed: {e}")
         return -np.inf

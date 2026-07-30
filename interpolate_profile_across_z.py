@@ -15,7 +15,7 @@ OUTPUT_DIR   = "/home/jange/scratch/FeedbackMimic/results/feedback_models"
  
 Z_ARR      = np.linspace(0.0, 2.0, 81)
 Z_OF_PROFILE_MATCHING = [0.0,0.5,1.0,1.5,2.0]
-GAMMA_SCALINGS  = [0.0,0.5,1.0]
+GAMMA_SCALINGS  = [0.0]
 K_ARR  = np.logspace(-6, 6, 8192)
 R_ARR  = np.logspace(-4, np.log10(1 / K_ARR.min()), 1500)
 

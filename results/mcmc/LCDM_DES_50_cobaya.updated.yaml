@@ -1,0 +1,153 @@
+theory: null
+likelihood:
+  shear_cnc:
+    type: []
+    speed: -1
+    stop_at_error: false
+    version: null
+    external: !!python/name:__main__.ShearCNCLikelihood ''
+    input_params:
+    - omega_m
+    - A_s
+    - A_sz
+    - alpha_sz
+    - beta_sz
+    - b_WL_0
+    - b_WL_M
+    - b_WL_z
+    output_params: []
+params:
+  omega_m:
+    prior:
+      dist: uniform
+      min: 0.05
+      max: 0.25
+    ref:
+      dist: norm
+      loc: 0.143344
+      scale: 0.008
+    proposal: 0.0008
+    latex: \omega_m
+  A_s:
+    prior:
+      dist: uniform
+      min: 2.0e-10
+      max: 4.0e-09
+    ref:
+      dist: norm
+      loc: 2.1e-09
+      scale: 2.0e-11
+    proposal: 5.0e-12
+    latex: A_\mathrm{s}
+  A_sz:
+    prior:
+      dist: uniform
+      min: -7.0
+      max: -3.0
+    ref:
+      dist: norm
+      loc: -4.352890598769685
+      scale: 0.32
+    proposal: 0.032
+    latex: A_\mathrm{SZ}
+  alpha_sz:
+    prior:
+      dist: uniform
+      min: 0.8
+      max: 2.0
+    ref:
+      dist: norm
+      loc: 1.1991734303623067
+      scale: 0.12
+    proposal: 0.012
+    latex: \alpha_\mathrm{SZ}
+  beta_sz:
+    prior:
+      dist: uniform
+      min: 0.0
+      max: 5.0
+    ref:
+      dist: norm
+      loc: 1.9996943667059135
+      scale: 0.16
+    proposal: 0.016
+    latex: \beta_\mathrm{SZ}
+  b_WL_0:
+    prior:
+      dist: norm
+      loc: 0.0
+      scale: 0.02
+    ref:
+      dist: norm
+      loc: 0.0
+      scale: 0.01
+    proposal: 0.001
+    latex: b_{\mathrm{WL},0}
+  b_WL_M:
+    prior:
+      dist: norm
+      loc: 1.0
+      scale: 0.02
+    ref:
+      dist: norm
+      loc: 1.0
+      scale: 0.01
+    proposal: 0.001
+    latex: b_{\mathrm{WL},M}
+  b_WL_z:
+    prior:
+      dist: norm
+      loc: 0.0
+      scale: 0.02
+    ref:
+      dist: norm
+      loc: 0.0
+      scale: 0.01
+    proposal: 0.001
+    latex: b_{\mathrm{WL},z}
+sampler:
+  mcmc:
+    sampler_type: mcmc
+    supports_periodic_params: true
+    burn_in: 0
+    max_tries: 5000
+    covmat: null
+    covmat_params: null
+    proposal_scale: 2.38
+    output_every: 60s
+    learn_every: 3d
+    temperature: 1
+    learn_proposal: true
+    learn_proposal_Rminus1_max: 30.0
+    learn_proposal_Rminus1_max_early: 1000.0
+    learn_proposal_Rminus1_min: 0.0
+    max_samples: 5000
+    Rminus1_stop: 0.05
+    Rminus1_cl_stop: 0.2
+    Rminus1_cl_level: 0.95
+    Rminus1_single_split: 4
+    measure_speeds: true
+    oversample_power: 0.4
+    oversample_thin: true
+    drag: false
+    blocking:
+    - - 1
+      - - omega_m
+        - A_s
+        - A_sz
+        - alpha_sz
+        - beta_sz
+        - b_WL_0
+        - b_WL_M
+        - b_WL_z
+    callback_function: null
+    callback_every: null
+    seed: null
+    check_every: null
+    oversample: null
+    drag_limits: null
+    fallback_covmat_scale: 4
+    version: 3.6.2
+verbose: false
+output: LCDM_DES_50_cobaya
+version: 3.6.2

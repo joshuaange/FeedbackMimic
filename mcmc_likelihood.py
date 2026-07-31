@@ -22,8 +22,8 @@ ns_fid      = 0.965
 omega_m_fid = 0.143344
 A_s_fid     = 2.1e-09
 
-_SURVEY_SR  = "/home/jange/scratch/FeedbackMimic/cosmocnc_axionHMcode_jax/cosmocnc_jax/surveys/survey_sr_so_sim.py"
-_SURVEY_CAT = "/home/jange/scratch/FeedbackMimic/cosmocnc_axionHMcode_jax/cosmocnc_jax/surveys/survey_cat_so_sim.py"
+_SURVEY_SR  = "/home/user/FeedbackMimic/cosmocnc_axionHMcode_jax/cosmocnc_jax/surveys/survey_sr_so_sim.py"
+_SURVEY_CAT = "/home/user/FeedbackMimic/cosmocnc_axionHMcode_jax/cosmocnc_jax/surveys/survey_cat_so_sim.py"
 
 Z_ARR        = np.linspace(0.0, 2.0, 81)
 Z_ARR = Z_ARR[Z_ARR > 0]
@@ -58,7 +58,7 @@ _c_SI    = 2.998e8
 _Mpc_m   = 3.0857e22
 _Msol_kg = 1.989e30
 
-_cache_path = f"/home/jange/scratch/FeedbackMimic/results/mcmc/MCMC_GRID_CACHE{cache_suffix}.pkl"
+_cache_path = f"/home/user/FeedbackMimic/results/mcmc/MCMC_GRID_CACHE{cache_suffix}.pkl"
 if os.path.exists(_cache_path):
     with open(_cache_path, "rb") as f:
         _G_a_table, _D_table, _norm_grid, _DA_table, _Sigma_crit_table = pickle.load(f)
@@ -158,11 +158,11 @@ from feedback_mimic import (
     dn_dlog10Mtot, Mtot_to_MDelta, get_tangential_shear
 )
 
-CACHE_PATH = f"/home/jange/scratch/FeedbackMimic/results/mcmc/MCMC_SHEAR_LCDM_CACHE{cache_suffix}.npz"
+CACHE_PATH = f"/home/user/FeedbackMimic/results/mcmc/MCMC_SHEAR_LCDM_CACHE{cache_suffix}.npz"
 if os.path.exists(CACHE_PATH):
     print("Shear cache already made")
 else:
-    HALO_INPUT_FILE = "/home/jange/scratch/FeedbackMimic/results/halo_model"
+    HALO_INPUT_FILE = "/home/user/FeedbackMimic/results/halo_model"
     
     # ── grids ─────────────────────────────────────────────────────────────────────
     h_fid         = 0.68

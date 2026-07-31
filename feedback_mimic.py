@@ -458,7 +458,7 @@ def compute_y0(P, r_arr, r500, h, scale_on_r500_for_int_bounds = 5):
 def profile_to_q(data, axion_dic, \
                               rho, r_t, M_arr, k_arr, r_arr,
                               bias_sz = 0.8, dof = 0.0,
-                              so_sim_sz_mf_noise_file_path="/home/jange/scratch/FeedbackMimic/cosmocnc_axionHMcode_jax/cosmocnc_jax/data/so_sim_sz_mf_noise.npy",
+                              so_sim_sz_mf_noise_file_path="/home/user/FeedbackMimic/cosmocnc_axionHMcode_jax/cosmocnc_jax/data/so_sim_sz_mf_noise.npy",
                               full_output = False,
                               alpha = 1.0510, beta = 5.4905, gamma = 0.3081, c500 = 1.177, P0h70m32 = 8.403, alpha_P = 0.12, include_alpha_P_prime=True, 
                               pressure_profile_prescription = "ArnaudUPP", 

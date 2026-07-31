@@ -17,9 +17,9 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["JAX_ENABLE_X64"]         = "1"
 os.environ.pop("DISPLAY", None)
 
-# NT=6 nice -n 5 mpirun -n 8 python run_mcmc.py
+# NT=2 mpirun -n 16 python run_mcmc.py
 
-_RAM_PER_CHAIN_GB = 12
+_RAM_PER_CHAIN_GB = 8.5
 N_CORES_PER_CHAIN = int(_NT)
 
 try:
@@ -59,7 +59,7 @@ os.environ["TOMOGRAPHIC_BINS"] = "DES"
 from mcmc_likelihood import get_log_likelihood, get_G_a_interp, get_D_grid_interp, get_norm_interp, get_Sigma_crit_arr
 
 # ── Paths ──────────────────────────────────────────────────────────────
-OUTPUT_DIR = "/home/jange/scratch/FeedbackMimic/results/"
+OUTPUT_DIR = "/home/user/FeedbackMimic/results/"
 
 catalogues = {
     "LCDM_DES_mock_seed50"                        : f"{OUTPUT_DIR}mock_catalogs/LCDM_DES_mock_seed50.pkl",
@@ -86,7 +86,7 @@ CATALOGUE_PATH = catalogues[mock_obs_type]
 (omega_m_fid, A_s_fid, A_sz_fid, alpha_sz_fid, beta_sz_fid, b_WL0_fid, b_WLz_fid, b_WLM_fid) = fiducials[mock_obs_type]
 
 # ── Run config ─────────────────────────────────────────────────────────
-resume_run     = False
+resume_run     = True
 max_samples    = 5000
 proposal_scale = 2.38
 # mpirun -n 8 python run_mcmc.py
@@ -186,8 +186,7 @@ class ShearCNCLikelihood(Likelihood):
         b_WL_M   = self.provider.get_param("b_WL_M")
         b_WL_z   = self.provider.get_param("b_WL_z")
         try:
-            t0 = time.time()
-            L  = fast_log_lik(
+            return fast_log_lik(
                 omega_m         = omega_m,
                 A_s             = A_s,
                 A_sz            = A_sz,
@@ -197,8 +196,6 @@ class ShearCNCLikelihood(Likelihood):
                 b_WL_M          = b_WL_M,
                 b_WL_z          = b_WL_z,
             )
-            print(f"  logp {time.time()-t0:.2f}s", flush=True)
-            return L
         except MemoryError:
             raise                      # never retry an OOM
         except Exception as e:
@@ -290,12 +287,13 @@ info = {
         "learn_proposal": True,
         "learn_every": "3d",
         "max_tries": 5000,
-        "learn_proposal_Rminus1_max":       20.0,
+        "learn_proposal_Rminus1_max":       30.0,
         "learn_proposal_Rminus1_max_early": 1000.0,
         "proposal_scale": proposal_scale,
         "Rminus1_stop":    0.05,
         "Rminus1_cl_stop": 0.2,
-        "covmat": initial_covmats[mock_obs_type]
+        "covmat": initial_covmats[mock_obs_type],
+        "measure_speeds": True,
     }},
     "output": output_name,
     "resume": resume_run,

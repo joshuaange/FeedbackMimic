@@ -111,7 +111,7 @@ sampler:
     proposal_scale: 2.38
     Rminus1_stop: 0.05
     Rminus1_cl_stop: 0.2
-    covmat: /home/user/FeedbackMimic/results/mcmc/LCDM_DES_50_cobaya.covmat
+    covmat: null
     measure_speeds: true
 verbose: false
 output: LCDM_hat0p0_DES_mock_seed50

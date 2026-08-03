@@ -1,0 +1,2 @@
+#        weight    minuslogpost         omega_m             A_s            A_sz        alpha_sz         beta_sz          b_WL_0          b_WL_M          b_WL_z   minuslogprior minuslogprior__0            chi2 chi2__shear_cnc
+              1       401685.26      0.14233062   2.0894222e-09      -4.0373122       1.2842376       2.0582208     -0.05890075      0.94621076    0.0034311131      -25.530316       -25.530316       803421.58       803421.58

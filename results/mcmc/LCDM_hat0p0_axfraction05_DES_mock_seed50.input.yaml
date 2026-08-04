@@ -107,7 +107,7 @@ sampler:
     learn_every: 3d
     max_tries: 5000
     learn_proposal_Rminus1_max: 30.0
-    learn_proposal_Rminus1_max_early: 100000.0
+    learn_proposal_Rminus1_max_early: 3000
     proposal_scale: 2.38
     Rminus1_stop: 0.05
     Rminus1_cl_stop: 0.2

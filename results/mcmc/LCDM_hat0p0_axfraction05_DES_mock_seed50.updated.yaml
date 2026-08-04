@@ -119,7 +119,7 @@ sampler:
     temperature: 1
     learn_proposal: true
     learn_proposal_Rminus1_max: 30.0
-    learn_proposal_Rminus1_max_early: 100000.0
+    learn_proposal_Rminus1_max_early: 3000
     learn_proposal_Rminus1_min: 0.0
     max_samples: 5000
     Rminus1_stop: 0.05

@@ -18,7 +18,7 @@ params:
       max: 0.25
     ref:
       dist: norm
-      loc: 0.143344
+      loc: 0.144462346
       scale: 0.008
     proposal: 0.0008
     latex: \omega_m
@@ -29,7 +29,7 @@ params:
       max: 4.0e-09
     ref:
       dist: norm
-      loc: 2.1e-09
+      loc: 2.18055978e-09
       scale: 2.0e-11
     proposal: 5.0e-12
     latex: A_\mathrm{s}
@@ -40,7 +40,7 @@ params:
       max: -3.0
     ref:
       dist: norm
-      loc: -4.352890598769685
+      loc: -4.37436434
       scale: 0.32
     proposal: 0.032
     latex: A_\mathrm{SZ}
@@ -51,7 +51,7 @@ params:
       max: 2.0
     ref:
       dist: norm
-      loc: 1.1991734303623067
+      loc: 1.24169279
       scale: 0.12
     proposal: 0.012
     latex: \alpha_\mathrm{SZ}
@@ -62,7 +62,7 @@ params:
       max: 5.0
     ref:
       dist: norm
-      loc: 1.9996943667059135
+      loc: 2.0242623
       scale: 0.16
     proposal: 0.016
     latex: \beta_\mathrm{SZ}

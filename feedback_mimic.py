@@ -12,7 +12,144 @@ from axionHMcode.cosmology.overdensities import func_r_vir, func_Delta_vir
 from axionHMcode.cosmology.basic_cosmology import func_H_z as H_of_z
 from axionHMcode.cosmology.basic_cosmology import func_rho_comp_0
 from axionHMcode.halo_model.cold_density_profile import func_delta_char, func_conc_param
+import h5py
+import re
 
+def safe_hydro_filename(s):
+    # Remove LaTeX math delimiters
+    s = s.replace('$', '')
+    
+    # Remove LaTeX commands while keeping their content
+    s = re.sub(r'\\text\{([^}]*)\}', r'\1', s)
+    s = s.replace(r'\sigma', 'sigma')
+    s = s.replace(r'\Delta', 'Delta')
+    s = s.replace(r'\_', '_')
+    
+    # Replace characters unsafe/unpleasant in filenames
+    s = re.sub(r'[^A-Za-z0-9._-]+', '_', s)
+    
+    # Collapse repeated underscores and strip them
+    s = re.sub(r'_+', '_', s).strip('_')
+    
+    return s.lower()
+
+def get_feedback_sim_spectra(k_arr_HMCode,
+                             sims = ["BAHAMAS", "Cosmo-OWLS", "EAGLE", "FLAMINGO", "Horizon-AGN", "Illustris", "Illustris-TNG", "SIMBA"],
+                             sims_files = "results/hydro_sims/existing_spectra/",
+                             z_target=0.0, get_hydro_spectrum_alone=False):
+    # These are (mostly) the ones plotted in https://arxiv.org/pdf/2410.17109 
+    #           Fig. 3 + IllustrisTNG, except milennium TNG and FABLE and C-OWLS 8.0 and Bahamas 7.8
+    total_labels = []
+    total_ratios = []
+    total_hydro = []
+    if "FLAMINGO" in sims:
+        with h5py.File(f'{sims_files}/FLAMINGO/L1_m9_DMO.hdf5') as file:
+            all_z_keys = [k for k in file.keys() if k.startswith('z=')]
+            matching   = [zk for zk in all_z_keys
+                          if np.isclose(float(zk[2:]), z_target, atol=0.01)]
+            if len(matching) == 0:
+                print(f"FLAMINGO: no redshift matching z={z_target}, skipping")
+            else:
+                zk    = matching[0]
+                k_dmo = file[f'{zk}/k'][:]
+                p_dmo = file[f'{zk}/P(k)'][:]
+
+                runs = [
+                    ('fgas-8σ.hdf5',       r'FLAMINGO $\text{fgas}-8\sigma$'),
+                    ('fgas-4σ.hdf5',       r'FLAMINGO $\text{fgas}-4\sigma$'),
+                    ('fgas-2σ.hdf5',       r'FLAMINGO $\text{fgas}-2\sigma$'),
+                    ('L1_m9.hdf5',         r'FLAMINGO L1\_m9'),
+                    ('fgas+2σ.hdf5',       r'FLAMINGO $\text{fgas}+2\sigma$'),
+                    ('Jet_fgas-4σ.hdf5',   r'FLAMINGO $\text{Jets fgas}-4\sigma$'),
+                    ('Jet.hdf5',           r'FLAMINGO $\text{Jets}$'),
+                    ('M_-σ_fgas-4σ.hdf5',  r'FLAMINGO $\text{M*}-\sigma+\text{fgas}-4\sigma$'),
+                    ('M_-σ.hdf5',          r'FLAMINGO $\text{M*}-\sigma$'),
+                ]
+                for fname, label in runs:
+                    with h5py.File(f'{sims_files}/FLAMINGO/{fname}') as file:
+                        p_hydro = file[f'{zk}/P(k)'][:]
+                    total_labels.append(label)
+                    total_ratios.append(np.interp(k_arr_HMCode, k_dmo / 0.681,
+                                                  p_hydro / p_dmo))
+                    total_hydro.append(np.interp(k_arr_HMCode, k_dmo / 0.681,
+                                                  p_hydro))
+    # The rest of the files from https://powerlib.strw.leidenuniv.nl/
+    SIM_REGISTRY_DAT = {
+        "BAHAMAS": {
+                "entries": [
+                ("powtable_BAHAMAS_Theat7.6_nu0_WMAP9",
+                 "powtable_DMONLY_2fluid_nu0_WMAP9_L400N1024",
+                 r"BAHAMAS $\Delta T=7.6$"),
+                ("powtable_BAHAMAS_Theat8.0_nu0_WMAP9",
+                 "powtable_DMONLY_2fluid_nu0_WMAP9_L400N1024",
+                 r"BAHAMAS $\Delta T=8.0$")
+            ]
+        },
+        "Cosmo-OWLS": {
+            "entries": [
+                ("powtable_C-OWLS_AGN_Theat8.3_WMAP7", "powtable_DMONLY_WMAP7_L400N1024", r"Cosmo-OWLS AGN $\Delta T=8.3$"),
+                ("powtable_C-OWLS_AGN_Theat8.5_WMAP7", "powtable_DMONLY_WMAP7_L400N1024", r"Cosmo-OWLS AGN $\Delta T=8.5$"),
+                ("powtable_C-OWLS_AGN_Theat8.7_WMAP7", "powtable_DMONLY_WMAP7_L400N1024", r"Cosmo-OWLS AGN $\Delta T=8.7$"),
+            ],
+        },
+    
+        "EAGLE": {
+            "entries": [
+                ("powtable_EAGLE_REF", "powtable_EAGLE_DMONLY_L100N1504", r"EAGLE"),
+            ],
+        },
+    
+        "Horizon-AGN": {
+            "entries": [
+                ("powtable_Hz-AGN", "powtable_Hz-DM", r"Horizon-AGN"),
+            ],
+        },
+    
+        "Illustris": {
+            "entries": [
+                ("powtable_Illustris-1", "powtable_Illustris-1-DM", r"Illustris"),
+            ],
+        },
+    
+        "Illustris-TNG": {
+            "entries": [
+                ("powtable_TNG100-1", "powtable_TNG100-1-DM", r"Illustris-TNG100"),
+                ("powtable_TNG300-1", "powtable_TNG300-1-DM", r"Illustris-TNG300"),
+            ],
+        },
+    
+        "SIMBA": {
+            "entries": [
+                ("powtable_SIMBA", "powtable_SIMBA_DM_L100N1024", r"Simba"),
+            ],
+        },
+    }
+    for sim_name in sims:
+        if sim_name not in SIM_REGISTRY_DAT:
+            continue
+        for hydro_name, dmo_name, label in SIM_REGISTRY_DAT[sim_name]["entries"]:
+            hydro_file = f"{sims_files}/{sim_name}/{hydro_name}.dat"
+            dmo_file   = f"{sims_files}/{sim_name}/{dmo_name}.dat"
+
+            dmo_data   = np.loadtxt(dmo_file)
+            hydro_data = np.loadtxt(hydro_file)
+
+            dmo_z   = dmo_data[np.isclose(dmo_data[:, 0], z_target, atol=0.01)]
+            hydro_z = hydro_data[np.isclose(hydro_data[:, 0], z_target, atol=0.01)]
+
+            if len(dmo_z) == 0 or len(hydro_z) == 0:
+                print(f"  Skipping {label} — no data at z={z_target}")
+                continue
+
+            total_labels.append(label)
+            total_ratios.append(
+                np.interp(k_arr_HMCode, dmo_z[:, 1], hydro_z[:, 2] / dmo_z[:, 2]))
+            total_hydro.append(
+                np.interp(k_arr_HMCode, dmo_z[:, 1], hydro_z[:, 2]))
+
+    if get_hydro_spectrum_alone:
+        return np.array(total_labels), np.array(total_ratios), np.array(total_hydro)
+    return np.array(total_labels), np.array(total_ratios)
 
 def smooth_kmax_filter(k_arr, k_max, width=0.5):
     return 1.0 / (1.0 + np.exp(-(np.log10(k_arr) - np.log10(k_max)) / width))
@@ -348,7 +485,7 @@ def dn_dlog10Mtot(data, cosmology_type):
         dnST_dlogMtot = dnST_dlnMc * np.gradient(np.log(data['M_CDM']))/np.gradient(np.log10(Mtot))
 
         return Mtot, dnST_dlogMtot
-    if cosmology_type == "FDM" or cosmology_type == "FDM_preferred":
+    if cosmology_type[:3] == "FDM":
         # This is the Dome fix for Sheth-Tormen FDM 
         dnST_dlnMc = data['hmf'] * data['M_CDM']
         dnST_dlogMc = dnST_dlnMc * np.log(10)

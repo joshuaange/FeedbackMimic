@@ -21,7 +21,7 @@ CAMB_WORKDIR = "/home/jange/scratch/FeedbackMimic/axionHMcode_work_directory"
 OUTPUT_DIR   = "/home/jange/scratch/FeedbackMimic/results/halo_model"
  
 NUM_M      = 300
-Z_ARR      = np.linspace(0.0, 2.0, 81)[70:]
+Z_ARR      = np.linspace(0.0, 2.0, 81)
 DO_FULL_2H = True
 C_MIN      = 5.196
  
@@ -33,10 +33,13 @@ HMCODE_FLAGS = dict(
     concentration_param = True,
 )
 
-FDM_mode = "preferred"
+FDM_mode = "axfraction05"
 if FDM_mode == "preferred":
     INPUT_FILE   = "/home/jange/scratch/FeedbackMimic/axionHMcode_input/axionHMcode_input_preferred.txt"
     OUTPUT_APPENDIX = "_preferred"
+if FDM_mode == "axfraction05":
+    INPUT_FILE   = "/home/jange/scratch/FeedbackMimic/axionHMcode_input/axionHMcode_input_axfraction05.txt"
+    OUTPUT_APPENDIX = "_axfraction05"
 
 ##############################################
 if os.path.exists(CAMB_EXE+'/./camb') == False:

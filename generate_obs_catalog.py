@@ -38,10 +38,14 @@ OUTPUT_DIR          = "/home/jange/scratch/FeedbackMimic/results/mock_catalogs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ── configuration (unchanged) ─────────────────────────────────────────────────
-HMF_TYPES = ['LCDM_COSMOCNC_SR', 'LCDM_COSMOCNC']
+HMF_TYPES = ['FDM_axfraction05']
+FDM_suffix = "_axfraction05" # must manually change this
+
 WL_TYPE = "DES"
 
-#['LCDM', 'LCDM_COSMOCNC_SR',  'LCDM_COSMOCNC', 'LCDM_hat0.0', 'LCDM_hat0.5', 'LCDM_hat1.0', 'FDM_preferred']
+#['LCDM', 'LCDM_COSMOCNC_SR',  'LCDM_COSMOCNC', 
+# 'LCDM_hat0.0', 'FDM_preferred']
+# 'LCDM_hat0.0_axfraction05', 'FDM_axfraction05']
 
 pressure_prescription = "ArnaudUPP"
 # allows ArnaudUPP, AricoBCM, baryonPasting
@@ -64,11 +68,12 @@ SR_params = "bestfitSR"
 
 INCLUDE_SHEAR_PROFILES = True
 etaz           = 0.7
-FEEDBACK_MODEL = f"etaz{etaz}_preferred_cooled"
+FEEDBACK_MODEL = f"etaz{etaz}{FDM_suffix}_cooled"
 
 N_MOCKS_PER_TYPE = 1
-SEEDS            = [51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75]
-SEEDS            = [50]
+#SEEDS            = [51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75]
+#SEEDS            = [50]
+SEEDS = [70,71,72,73,74,75]
 
 Q_TH  = 5.0
 Q_MIN = 0.4 + 1e-6        # this just makes it be a smooth taper on the total mass of halos selected
@@ -323,16 +328,22 @@ def shape_noise_per_bin(R_bins_Mpc_over_h, DA_Mpc_over_h):
 
 def load_slice(z, hmf_type):
     if hmf_type[:8] == 'LCDM_hat':
-        with open(f"{HALO_INPUT_FILE}/{z}_data_LCDM_full2h_preferred.pkl", "rb") as f:
+        with open(f"{HALO_INPUT_FILE}/{z}_data_LCDM_full2h{FDM_suffix}.pkl", "rb") as f:
             data = pickle.load(f)
         axion_dic = None
         r_t, rho_crit, rho_char, concentration, r_s, Delta_vir, rho_0, rho_0_wh = \
             get_some_quantities(data, axion_dic=axion_dic)
-        gamma_val        = float(hmf_type[8:])
-        baryonic_profile = np.load(
-            f"{FEEDBACK_INPUT_FILE}/{FEEDBACK_MODEL}/"
-            f"utilde_results_gamma{gamma_val}_z{z}.npy",
-            allow_pickle=True)[()]
+        gamma_val        = float(hmf_type[8:11])
+        if FDM_suffix == "_preferred":
+            baryonic_profile = np.load(
+                f"{FEEDBACK_INPUT_FILE}/{FEEDBACK_MODEL}/"
+                f"utilde_results_gamma{gamma_val}_z{z}.npy",
+                allow_pickle=True)[()]
+        else:
+            baryonic_profile = np.load(
+                f"{FEEDBACK_INPUT_FILE}/{FEEDBACK_MODEL}/"
+                f"utilde{FDM_suffix}_results_gamma{gamma_val}_z{z}.npy",
+                allow_pickle=True)[()]
         Mtot = data['M']
         hmf  = baryonic_profile[-1]['hmf'] * Mtot
         rho  = baryonic_profile[-1]['rho_hat_unbiased']
@@ -340,7 +351,7 @@ def load_slice(z, hmf_type):
         axion_dic = None
 
     elif hmf_type == 'LCDM':
-        with open(f"{HALO_INPUT_FILE}/{z}_data_LCDM_full2h_preferred.pkl", "rb") as f:
+        with open(f"{HALO_INPUT_FILE}/{z}_data_LCDM_full2h{FDM_suffix}.pkl", "rb") as f:
             data = pickle.load(f)
         Mtot, hmf_log10 = dn_dlog10Mtot(data, hmf_type)
         hmf  = hmf_log10 / np.log(10) # dn/dlnMvir in h units
@@ -351,8 +362,8 @@ def load_slice(z, hmf_type):
             u_k=get_NFW_profile(r_v=r_t, k_arr=K_ARR, r_s=r_s, r_t=r_t),
             r_arr=R_ARR, k_arr=K_ARR, M_arr=Mtot, r_t=r_t)
 
-    elif hmf_type == 'FDM_preferred':
-        fname = f"{HALO_INPUT_FILE}/{z}_data_FDM_full2h_preferred.pkl"
+    elif hmf_type[:3] == 'FDM':
+        fname = f"{HALO_INPUT_FILE}/{z}_data_FDM_full2h{FDM_suffix}.pkl"
         with open(fname, "rb") as f:
             data = pickle.load(f)
         Mtot, hmf_log10 = dn_dlog10Mtot(data, hmf_type)
@@ -365,7 +376,7 @@ def load_slice(z, hmf_type):
         rho = rho_ax + rho_c
 
     elif hmf_type in ('LCDM_COSMOCNC', 'LCDM_COSMOCNC_SR'):
-        with open(f"{HALO_INPUT_FILE}/{z}_data_LCDM_full2h_preferred.pkl", "rb") as f:
+        with open(f"{HALO_INPUT_FILE}/{z}_data_LCDM_full2h{FDM_suffix}.pkl", "rb") as f:
             data = pickle.load(f)
         Mtot = data['M']
         axion_dic = None

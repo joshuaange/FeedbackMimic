@@ -22,18 +22,19 @@ from feedback_mimic import (
     get_rho_cga
 )
 
+FDM_suffix = "_axfraction05"
 OUTPUT_DIR   = "/home/jange/scratch/FeedbackMimic/results/profile_matching"
 etaz = 0.7
 if etaz == 0.0:
-    MODEL = f"no_decay_preferred_cooled"
+    MODEL = f"no_decay{FDM_suffix}_cooled"
 else:
-    MODEL = f"etaz{etaz}_preferred_cooled"
+    MODEL = f"etaz{etaz}{FDM_suffix}_cooled"
 
 verbose = False
 
 INPUT_DIR   = "/home/jange/scratch/FeedbackMimic/results/halo_model"
 INPUT_SUFFIX = "full2h"   # set to '' to load files without the full2h suffix
-Z                  = 2.0 # 0.0, 0.5, 1.0, 1.5, 2.0
+Z                  = 0.0 # 0.0, 0.5, 1.0, 1.5, 2.0
 NUM_ITERATIONS     = 25
 GAMMA_SCALINGS     = [0.0]
 K_ARR  = np.logspace(-6, 6, 8192)
@@ -43,9 +44,9 @@ MAX_R      = 30         # upper bracket for root_scalar [Mpc/h]
 
 suffix = f"_{INPUT_SUFFIX}" if INPUT_SUFFIX else ""
 
-with open(INPUT_DIR + f"/{Z}_data_LCDM{suffix}_preferred.pkl", "rb") as f:
+with open(INPUT_DIR + f"/{Z}_data_LCDM{suffix}{FDM_suffix}.pkl", "rb") as f:
     data_LCDM = pickle.load(f)
-with open(INPUT_DIR + f"/{Z}_data_FDM{suffix}_preferred.pkl", "rb") as f:
+with open(INPUT_DIR + f"/{Z}_data_FDM{suffix}{FDM_suffix}.pkl", "rb") as f:
     data_FDM = pickle.load(f)
 r_v, rho_crit, rho_char, concentration, r_s, Delta_vir, rho_0, rho_0_wh = \
     get_some_quantities(data_LCDM)
@@ -95,15 +96,16 @@ else:
     u_cga = 0.0
     rho_cga = 0.0
     M_cga = 0.0
+    f_cga = np.zeros(np.shape(M_arr))
 
-if MODEL == "no_decay_preferred_cooled":
+if MODEL[:8] == "no_decay":
     print("Using base FDM + cooling S(k) from BCM cga profile")
     Pk_to_match = Pk_base
 elif MODEL[:4] == 'etaz': # assumed cooling here too
     print(f"Using etaz={etaz} times z={Z}")
-    with open(INPUT_DIR + f"/{0.0}_data_FDM{suffix}_preferred.pkl", "rb") as f:
+    with open(INPUT_DIR + f"/{0.0}_data_FDM{suffix}{FDM_suffix}.pkl", "rb") as f:
         data_FDM_z0 = pickle.load(f)
-    with open(INPUT_DIR + f"/{0.0}_data_LCDM{suffix}_preferred.pkl", "rb") as f:
+    with open(INPUT_DIR + f"/{0.0}_data_LCDM{suffix}{FDM_suffix}.pkl", "rb") as f:
         data_LCDM_z0 = pickle.load(f)
         
     Pk_zindependent = data_LCDM['P'] * data_FDM_z0['P'] / data_LCDM_z0['P']
@@ -347,5 +349,8 @@ for gamma_scaling in GAMMA_SCALINGS:
             "u_k_cga": u_cga
         }
         my_results.append(iteration_results)
-    
-    np.save(OUTPUT_DIR + f"/{MODEL}/utilde_results_gamma{gamma_scaling}_{NUM_ITERATIONS}it_z{Z}.npy", [my_results[-1]])
+
+    if FDM_suffix == "_preferred":
+        np.save(OUTPUT_DIR + f"/{MODEL}/utilde_results_gamma{gamma_scaling}_{NUM_ITERATIONS}it_z{Z}.npy", [my_results[-1]])
+    else:
+        np.save(OUTPUT_DIR + f"/{MODEL}/utilde{FDM_suffix}_results_gamma{gamma_scaling}_{NUM_ITERATIONS}it_z{Z}.npy", [my_results[-1]])

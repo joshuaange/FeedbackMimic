@@ -20,7 +20,8 @@ K_ARR  = np.logspace(-6, 6, 8192)
 R_ARR  = np.logspace(-4, np.log10(1 / K_ARR.min()), 1500)
 
 etaz = 0.7
-FEEDBACK_MODEL = f"etaz{etaz}_preferred_cooled"
+FDM_suffix = "_axfraction05"
+FEEDBACK_MODEL = f"etaz{etaz}{FDM_suffix}_cooled"
 
 FEEDBACK_MODEL_TO_MATCH = FEEDBACK_MODEL
 NUM_ITERATIONS_TO_MATCH = 25
@@ -37,7 +38,7 @@ print(FEEDBACK_MODEL)
 for gamma_scaling in GAMMA_SCALINGS:
     print(f"\n{'='*60}\ngamma_scaling = {gamma_scaling}")
     for z in tqdm(Z_ARR):
-        with open(HALO_INPUT_FILE + f"/{z}_data_LCDM_full2h_preferred.pkl", "rb") as f:
+        with open(HALO_INPUT_FILE + f"/{z}_data_LCDM_full2h{FDM_suffix}.pkl", "rb") as f:
             data_LCDM = pickle.load(f)
         r_v, rho_crit, rho_char, concentration, r_s, Delta_vir, rho_0, rho_0_wh = get_some_quantities(data_LCDM)
         M_arr = data_LCDM['M']
@@ -65,15 +66,19 @@ for gamma_scaling in GAMMA_SCALINGS:
         Z_1 = min((x for x in Z_OF_PROFILE_MATCHING if x >= z), default=None)
         print(f"{Z_0} <= {z} <= {Z_1}")
 
-        with open(HALO_INPUT_FILE + f"/{Z_0}_data_LCDM_full2h_preferred.pkl", "rb") as f:
+        with open(HALO_INPUT_FILE + f"/{Z_0}_data_LCDM_full2h{FDM_suffix}.pkl", "rb") as f:
             data_LCDM_z0 = pickle.load(f)
         r_v_z0, *_ = get_some_quantities(data_LCDM_z0)
-        with open(HALO_INPUT_FILE + f"/{Z_1}_data_LCDM_full2h_preferred.pkl", "rb") as f:
+        with open(HALO_INPUT_FILE + f"/{Z_1}_data_LCDM_full2h{FDM_suffix}.pkl", "rb") as f:
             data_LCDM_z1 = pickle.load(f)
         r_v_z1, *_ = get_some_quantities(data_LCDM_z1)
 
-        starting_profile_z0 = np.load(PROF_INPUT_FILE + f"/{FEEDBACK_MODEL_TO_MATCH}/utilde_results_gamma{gamma_scaling}_{NUM_ITERATIONS_TO_MATCH}it_z{Z_0}.npy", allow_pickle=True)[()]
-        starting_profile_z1 = np.load(PROF_INPUT_FILE + f"/{FEEDBACK_MODEL_TO_MATCH}/utilde_results_gamma{gamma_scaling}_{NUM_ITERATIONS_TO_MATCH}it_z{Z_1}.npy", allow_pickle=True)[()]
+        if FDM_suffix == "_preferred":
+            starting_profile_z0 = np.load(PROF_INPUT_FILE + f"/{FEEDBACK_MODEL_TO_MATCH}/utilde_results_gamma{gamma_scaling}_{NUM_ITERATIONS_TO_MATCH}it_z{Z_0}.npy", allow_pickle=True)[()]
+            starting_profile_z1 = np.load(PROF_INPUT_FILE + f"/{FEEDBACK_MODEL_TO_MATCH}/utilde_results_gamma{gamma_scaling}_{NUM_ITERATIONS_TO_MATCH}it_z{Z_1}.npy", allow_pickle=True)[()]
+        else:
+            starting_profile_z0 = np.load(PROF_INPUT_FILE + f"/{FEEDBACK_MODEL_TO_MATCH}/utilde{FDM_suffix}_results_gamma{gamma_scaling}_{NUM_ITERATIONS_TO_MATCH}it_z{Z_0}.npy", allow_pickle=True)[()]
+            starting_profile_z1 = np.load(PROF_INPUT_FILE + f"/{FEEDBACK_MODEL_TO_MATCH}/utilde{FDM_suffix}_results_gamma{gamma_scaling}_{NUM_ITERATIONS_TO_MATCH}it_z{Z_1}.npy", allow_pickle=True)[()]
 
         if Z_0 == Z_1:
             Delta        = starting_profile_z0[-1]['Delta']
@@ -121,4 +126,7 @@ for gamma_scaling in GAMMA_SCALINGS:
             "u_k_axionHMCode": u_k_axionHMCode,
         }
 
-        np.save(OUTPUT_DIR + f"/{FEEDBACK_MODEL}/utilde_results_gamma{gamma_scaling}_z{z}.npy", [iteration_results])
+        if FDM_suffix == "_preferred":
+            np.save(OUTPUT_DIR + f"/{FEEDBACK_MODEL}/utilde_results_gamma{gamma_scaling}_z{z}.npy", [iteration_results])
+        else:
+            np.save(OUTPUT_DIR + f"/{FEEDBACK_MODEL}/utilde{FDM_suffix}_results_gamma{gamma_scaling}_z{z}.npy", [iteration_results])

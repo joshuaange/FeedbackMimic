@@ -52,7 +52,7 @@ SIZE = COMM.Get_size()
 print(f"MPI rank {RANK}/{SIZE} starting", flush=True)
 
 
-mock_obs_type = "FDM_axfraction05_DES_mock_seed60" 
+mock_obs_type = "LCDM_hat0p0_axfraction05_DES_mock_seed60" 
 import os
 
 os.environ["TOMOGRAPHIC_BINS"] = "DES"
@@ -308,7 +308,7 @@ info = {
         "learn_every": "3d",
         "max_tries": 5000,
         "learn_proposal_Rminus1_max":       30.0,
-        "learn_proposal_Rminus1_max_early": 1e5,
+        "learn_proposal_Rminus1_max_early": 3000.0,
         "proposal_scale": proposal_scale,
         "Rminus1_stop":    0.05,
         "Rminus1_cl_stop": 0.2,

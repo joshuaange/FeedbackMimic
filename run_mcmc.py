@@ -52,7 +52,7 @@ SIZE = COMM.Get_size()
 print(f"MPI rank {RANK}/{SIZE} starting", flush=True)
 
 
-mock_obs_type = "FDM_axfraction05_DES_mock_seed50" 
+mock_obs_type = "FDM_axfraction05_DES_mock_seed60" 
 import os
 
 os.environ["TOMOGRAPHIC_BINS"] = "DES"
@@ -69,16 +69,20 @@ catalogues = {
     "FDM_preferred_DES_mock_seed50"               : f"{OUTPUT_DIR}mock_catalogs/FDM_preferred_DES_mock_seed50.pkl",
     "LCDM_hat0p0_axfraction05_DES_mock_seed50"    : f"{OUTPUT_DIR}mock_catalogs/LCDM_hat0p0_axfraction05_DES_mock_seed50.pkl",
     "FDM_axfraction05_DES_mock_seed50"            : f"{OUTPUT_DIR}mock_catalogs/FDM_axfraction05_DES_mock_seed50.pkl",
+    "LCDM_hat0p0_axfraction05_DES_mock_seed60"    : f"{OUTPUT_DIR}mock_catalogs/LCDM_hat0p0_axfraction05_DES_mock_seed60.pkl",
+    "FDM_axfraction05_DES_mock_seed60"            : f"{OUTPUT_DIR}mock_catalogs/FDM_axfraction05_DES_mock_seed60.pkl",
 }
 fiducials = {
     # using the "fiducial" SZ parameters from 26 sims, but it doesn't really matter for priors, and unbiased WL parameters
     "LCDM_DES_mock_seed50"                        : (0.143344, 2.1e-09, -4.352890598769685, 1.1991734303623067, 1.9996943667059135, 0.0, 0.0, 1.0),
-    # using feedback-calibrated bWL prior centers, but then the realization-specific Nelder-Meade best fits for cosmology/SZ (only helps in already being around optimal point, doesn't actually impact priors)
+    # using preferred feedback-calibrated bWL prior centers, but then the realization-specific Nelder-Meade best fits for cosmology/SZ (only helps in already being nearby MAP, but doesn't actually impact priors)
     "LCDM_hat0p0_DES_mock_seed50"                 : (1.42663207e-01,  2.10973439e-09, -4.37044094e+00,  1.19197167e+00,  1.95709208e+00, -0.026529186318610246, -0.0020055694855883877, 0.9813200674681225),
     "FDM_preferred_DES_mock_seed50"               : (1.41677336e-01,  2.20376802e-09, -4.36434194e+00,  1.21023973e+00,  1.91814732e+00, -0.026529186318610246, -0.0020055694855883877, 0.9813200674681225),
-    # using feedback-calibrated bWL prior centers, but then the fiducial cosmology/SZ (don't want to spend time waiting for 26 convergences. it doesn't matter outside of burn-in)
-    "LCDM_hat0p0_axfraction05_DES_mock_seed50"    : (0.143344, 2.1e-09, -4.352890598769685, 1.1991734303623067, 1.9996943667059135, -0.05217854442372193, -0.018315771464976323, 0.9684987406289811),
-    "FDM_axfraction05_DES_mock_seed50"            : (0.143344, 2.1e-09, -4.352890598769685, 1.1991734303623067, 1.9996943667059135, -0.05217854442372193, -0.018315771464976323, 0.9684987406289811),
+    # using extreme feedback-calibrated bWL prior centers, but then the realization-specific Nelder-Meade best fits for cosmology/SZ (only helps in already being nearby MAP, but doesn't actually impact priors)
+    "LCDM_hat0p0_axfraction05_DES_mock_seed50"    : (0.141009214, 2.12643834e-09, -4.38961681, 1.19114711, 2.04489952, -0.05217854442372193, -0.018315771464976323, 0.9684987406289811),
+    "FDM_axfraction05_DES_mock_seed50"            : (0.144462346, 2.18055978e-09, -4.37436434, 1.24169279, 2.02426230, -0.05217854442372193, -0.018315771464976323, 0.9684987406289811),
+    "LCDM_hat0p0_axfraction05_DES_mock_seed60"    : (0.131470597, 2.49054317e-09, -4.38785212, 1.14404354, 1.88624759, -0.05217854442372193, -0.018315771464976323, 0.9684987406289811),
+    "FDM_axfraction05_DES_mock_seed60"            : (0.143273936, 2.20330735e-09, -4.38217053, 1.21248075, 2.12177969, -0.05217854442372193, -0.018315771464976323, 0.9684987406289811),
 }
 output_names = {
     "LCDM_DES_mock_seed50"                        : f"{OUTPUT_DIR}mcmc/LCDM_DES_50_cobaya",
@@ -86,19 +90,23 @@ output_names = {
     "FDM_preferred_DES_mock_seed50"               : f"{OUTPUT_DIR}mcmc/FDM_preferred_DES_mock_seed50",
     "LCDM_hat0p0_axfraction05_DES_mock_seed50"    : f"{OUTPUT_DIR}mcmc/LCDM_hat0p0_axfraction05_DES_mock_seed50",
     "FDM_axfraction05_DES_mock_seed50"            : f"{OUTPUT_DIR}mcmc/FDM_axfraction05_DES_mock_seed50",
+    "LCDM_hat0p0_axfraction05_DES_mock_seed60"    : f"{OUTPUT_DIR}mcmc/LCDM_hat0p0_axfraction05_DES_mock_seed60",
+    "FDM_axfraction05_DES_mock_seed60"            : f"{OUTPUT_DIR}mcmc/FDM_axfraction05_DES_mock_seed60",
 }
 initial_covmats = {
     "LCDM_DES_mock_seed50"                        : None,
     "LCDM_hat0p0_DES_mock_seed50"                 : None,
     "FDM_preferred_DES_mock_seed50"               : None,
     "LCDM_hat0p0_axfraction05_DES_mock_seed50"    : None,
-    "FDM_axfraction05_DES_mock_seed50"            : None
+    "FDM_axfraction05_DES_mock_seed50"            : None,
+    "LCDM_hat0p0_axfraction05_DES_mock_seed60"    : None,
+    "FDM_axfraction05_DES_mock_seed60"            : None,
 }
 CATALOGUE_PATH = catalogues[mock_obs_type]
 (omega_m_fid, A_s_fid, A_sz_fid, alpha_sz_fid, beta_sz_fid, b_WL0_fid, b_WLz_fid, b_WLM_fid) = fiducials[mock_obs_type]
 
 # ── Run config ─────────────────────────────────────────────────────────
-resume_run     = False
+resume_run     = True
 max_samples    = 5000
 proposal_scale = 2.38
 # mpirun -n 8 python run_mcmc.py

@@ -51,8 +51,18 @@ SIZE = COMM.Get_size()
 
 print(f"MPI rank {RANK}/{SIZE} starting", flush=True)
 
+resume = os.environ.get("resume", "True")
+mock_obs_type = os.environ.get("mock_obs_type", "LCDM_DES_mock_seed50")
 
-mock_obs_type = "LCDM_hat0p0_axfraction05_DES_mock_seed60" 
+#resume=True mock_obs_type=LCDM_hat0p0_axfraction05_DES_mock_seed60 NT=2 mpirun -n 8 python run_mcmc.py
+#     R-1: 0.05737
+#resume=True mock_obs_type=FDM_preferred_DES_mock_seed50 NT=2 mpirun -n 8 python run_mcmc.py
+#     R-1: 0.095862
+#resume=True mock_obs_type=LCDM_hat0p0_axfraction05_DES_mock_seed60 NT=2 mpirun -n 8 python run_mcmc.py
+#     R-1: 138.417712
+#resume=True mock_obs_type=FDM_axfraction05_DES_mock_seed60 NT=2 mpirun -n 8 python run_mcmc.py
+#     no R-1 analysed yet
+
 import os
 
 os.environ["TOMOGRAPHIC_BINS"] = "DES"
@@ -106,7 +116,7 @@ CATALOGUE_PATH = catalogues[mock_obs_type]
 (omega_m_fid, A_s_fid, A_sz_fid, alpha_sz_fid, beta_sz_fid, b_WL0_fid, b_WLz_fid, b_WLM_fid) = fiducials[mock_obs_type]
 
 # ── Run config ─────────────────────────────────────────────────────────
-resume_run     = True
+resume_run     = True if resume == "True" else False
 max_samples    = 5000
 proposal_scale = 2.38
 # mpirun -n 8 python run_mcmc.py

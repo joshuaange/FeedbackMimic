@@ -54,14 +54,22 @@ print(f"MPI rank {RANK}/{SIZE} starting", flush=True)
 resume = os.environ.get("resume", "True")
 mock_obs_type = os.environ.get("mock_obs_type", "LCDM_DES_mock_seed50")
 
-#resume=True mock_obs_type=LCDM_hat0p0_axfraction05_DES_mock_seed60 NT=2 mpirun -n 8 python run_mcmc.py
-#     R-1: 0.05737
+# PREFERRED FDM AND FEEDBACK
+#resume=True mock_obs_type=LCDM_hat0p0_DES_mock_seed50 NT=2 mpirun -n 8 python run_mcmc.py
+#     R-1: 0.049115 (converged)
+
 #resume=True mock_obs_type=FDM_preferred_DES_mock_seed50 NT=2 mpirun -n 8 python run_mcmc.py
 #     R-1: 0.095862
-#resume=True mock_obs_type=LCDM_hat0p0_axfraction05_DES_mock_seed60 NT=2 mpirun -n 8 python run_mcmc.py
-#     R-1: 138.417712
+
+# EXTREME FDM AND FEEDBACK
+#resume=True mock_obs_type=FDM_axfraction05_DES_mock_seed50 NT=2 mpirun -n 8 python run_mcmc.py
+#     R-1: 0.047213 (converged)
 #resume=True mock_obs_type=FDM_axfraction05_DES_mock_seed60 NT=2 mpirun -n 8 python run_mcmc.py
-#     no R-1 analysed yet
+#     R-1: 0.408305
+#resume=True mock_obs_type=LCDM_hat0p0_axfraction05_DES_mock_seed50 NT=2 mpirun -n 8 python run_mcmc.py
+#     R-1: 0.05737
+#resume=True mock_obs_type=LCDM_hat0p0_axfraction05_DES_mock_seed60 NT=2 mpirun -n 8 python run_mcmc.py
+#     R-1: 0.762725
 
 import os
 

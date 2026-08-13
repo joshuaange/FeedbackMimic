@@ -1,3 +1,4 @@
+theory: null
 likelihood:
   shear_cnc:
     type: []
@@ -14,6 +15,7 @@ likelihood:
     - b_WL_0
     - b_WL_M
     - b_WL_z
+    output_params: []
 params:
   omega_m:
     prior:
@@ -128,7 +130,16 @@ sampler:
     oversample_power: 0.4
     oversample_thin: true
     drag: false
-    blocking: null
+    blocking:
+    - - 1
+      - - omega_m
+        - A_s
+        - A_sz
+        - alpha_sz
+        - beta_sz
+        - b_WL_0
+        - b_WL_M
+        - b_WL_z
     callback_function: null
     callback_every: null
     seed: null
@@ -136,7 +147,7 @@ sampler:
     oversample: null
     drag_limits: null
     fallback_covmat_scale: 4
-    version: null
+    version: 3.6.2
 verbose: false
 output: FDM_axfraction05_DES_mock_seed50_calibrated
 version: 3.6.2
